@@ -1,21 +1,26 @@
 # Quick Context
 
-## What is this?
+## What
+
 <!-- one sentence -->
 
-## How to run
+## Entry
+
 ```bash
 ```
 
-## Key files
+## Key Files
+
 | File | Purpose |
 |------|---------|
 | | |
 
 ## Dependencies
+
 | Repo | How |
 |------|-----|
 | | |
 
 ## Workspace
-@workspace → ../.pikb/
+
+@workspace → ../.pikb/MAP.md

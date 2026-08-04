@@ -1,18 +1,11 @@
 # Pitfalls & Tricky Spots
 
-## Known Issues
+> Difficulty: ⭐（trivial）to ⭐⭐⭐⭐⭐（nightmare to debug）
 
-### Issue Title
-- Difficulty: ⭐⭐⭐⭐
-- Symptom: 
-- Root Cause: 
-- Solution: 
-- Related Files: 
+## N. Title
 
----
-
-## Gotchas
-<!-- subtle behaviors that look like bugs but aren't -->
-
-## Common Mistakes
-<!-- things newcomers frequently get wrong -->
+- Difficulty: ⭐⭐⭐
+- Symptom: what you see
+- Root Cause: why it happens
+- Solution: correct approach
+- Related: see [CONVENTIONS §X](./CONVENTIONS.md#...)

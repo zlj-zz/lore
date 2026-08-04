@@ -1,10 +1,6 @@
 # Service Map
 
-## Repositories
-
-| Repo | Purpose | Key Modules |
-|------|---------|-------------|
-| | | |
+> 常见坑：[PITFALLS.md](./PITFALLS.md)
 
 ## Architecture
 
@@ -15,10 +11,30 @@
 └──────────┘     └──────────┘     └──────────┘
 ```
 
-## Data Flow
-<!-- Key data paths between services -->
+## Repositories
 
-## External Dependencies
-| Service | Used By | Purpose |
-|---------|---------|---------|
+| Repo | Layer | Purpose | Key Modules |
+|------|-------|---------|-------------|
+| | | | |
+
+## Data Flow
+
+| From | To | What |
+|------|-----|------|
 | | | |
+
+## External Systems
+
+| System | Direction | Integration Point |
+|--------|-----------|-------------------|
+| | | |
+
+## Environment Configs
+
+<!-- naming convention for env configs -->
+
+## Document Index
+
+| What | Where |
+|------|-------|
+| | |
