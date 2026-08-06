@@ -117,10 +117,70 @@ export default function (pi: ExtensionAPI) {
       const warningLine = lines.find((l) => l.includes("⚠"));
       if (warningLine) {
         ctx.ui.notify(`[lore] ${warningLine.replace(/^\s*⚠\s*/, "").trim()}`, "warn");
-      } else if (status.output.includes("not found")) {
-        // silent — let AGENTS.md rules handle the prompt
       }
     }
     // if KB is healthy, don't interrupt — just be quiet
+  });
+
+  // ── Passive hooks ──
+
+  let turnCount = 0;
+  const STALENESS_INTERVAL = 5; // check every 5 turns
+
+  pi.on("turn_end", async (_event, ctx) => {
+    turnCount++;
+    if (turnCount % STALENESS_INTERVAL !== 0) return;
+    if (!hasScript("check-staleness.sh")) return;
+
+    // quick staleness check — only notify if there are issues
+    try {
+      const result = runScript("check-staleness.sh", ["--json"]);
+      if (!result.ok) return;
+      const data = JSON.parse(result.output);
+      if (data.stale) {
+        const issues = data.issues || [];
+        const warnings = issues.filter((i: any) => i.severity === "warning");
+        if (warnings.length > 0) {
+          ctx.ui.notify(
+            `[lore] ${warnings.length} KB issue(s) — run /lore-detail`,
+            "warn",
+          );
+        }
+      }
+    } catch {
+      // silent — script failures shouldn't interrupt the user
+    }
+  });
+
+  pi.on("tool_execution_end", async (event, ctx) => {
+    // detect potential new repo creation
+    const toolName = event.tool?.name || "";
+    const isCloneOrInit =
+      toolName === "bash" &&
+      event.args?.command &&
+      /(git\s+clone|git\s+init|mkdir\s+-p.*\/)|(create\s+directory)/i.test(
+        String(event.args.command),
+      );
+
+    if (!isCloneOrInit) return;
+    if (!hasScript("scan-workspace.sh")) return;
+
+    // debounce: wait 2s then check if a new repo appeared
+    setTimeout(() => {
+      try {
+        const scan = runScript("scan-workspace.sh");
+        if (!scan.ok) return;
+        const data = JSON.parse(scan.output);
+        const uncovered = data.repos?.filter((r: any) => !r.has_context_md) || [];
+        if (uncovered.length > 0) {
+          ctx.ui.notify(
+            `[lore] ${uncovered.length} repo(s) without CONTEXT.md — consider /skill:lore 创建知识库`,
+            "info",
+          );
+        }
+      } catch {
+        // silent
+      }
+    }, 2000);
   });
 }
