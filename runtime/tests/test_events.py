@@ -69,5 +69,23 @@ class TestPitfalls(unittest.TestCase):
         self.assertEqual(r["matches"][0]["id"], "1")
 
 
+class TestCLI(unittest.TestCase):
+    def test_cli_json_stdout(self):
+        import subprocess
+        import sys
+
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ROOT)
+        p = subprocess.run(
+            [sys.executable, "-m", "lore_runtime.cli", "health", "--cwd", str(FIXTURE / "app")],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(p.returncode, 0)
+        data = json.loads(p.stdout)
+        self.assertEqual(data["event"], "health")
+
+
 if __name__ == "__main__":
     unittest.main()
