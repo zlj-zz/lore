@@ -1,79 +1,106 @@
 #!/usr/bin/env bash
-# lore Cursor hook: postToolUse — PITFALLS triggers + throttled KB health check.
-# stdin: Cursor hook JSON. stdout: {"additional_context": "..."} or {}. Never blocks.
-set -euo pipefail
+# lore Cursor hook: postToolUse — PITFALLS + throttled health via lore-event.
+# stdin: Cursor hook JSON. stdout: {"additional_context"} or {}.
+set -uo pipefail
 
-export LORE_PAYLOAD
-LORE_PAYLOAD="$(cat)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+# shellcheck source=../adapters/common.sh
+source "$ROOT/adapters/common.sh"
 
-python3 <<'PY'
-import json, os, subprocess, time
-from pathlib import Path
-
-payload = json.loads(os.environ.get("LORE_PAYLOAD") or "{}")
-cwd = payload.get("cwd") or os.getcwd()
-tool = payload.get("tool_name") or ""
-tin = payload.get("tool_input") or {}
+payload="$(cat || true)"
+LORE_CWD=""
+LORE_PATH=""
+LORE_CMD=""
+{
+  IFS= read -r LORE_CWD || true
+  IFS= read -r LORE_PATH || true
+  IFS= read -r LORE_CMD || true
+} < <(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    p = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+cwd = p.get("cwd") or ""
+tool = p.get("tool_name") or ""
+tin = p.get("tool_input") or {}
 if isinstance(tin, str):
     try:
         tin = json.loads(tin)
     except Exception:
         tin = {}
-
 path = ""
-cmd = ""
 for key in ("path", "file_path", "target_notebook", "file"):
     v = tin.get(key)
     if isinstance(v, str) and v:
         path = v
         break
+cmd = ""
 if tool in ("Shell", "Bash") or "shell" in tool.lower():
     c = tin.get("command")
     if isinstance(c, str):
         cmd = c
+print(cwd)
+print(path)
+print(cmd)
+' 2>/dev/null || true)
+[[ -z "$LORE_CWD" ]] && LORE_CWD="$(pwd)"
 
-notes = []
+notes=()
 
-match = os.path.expanduser("~/.agents/skills/lore/scripts/match-trigger.sh")
-if os.path.isfile(match) and (path or cmd):
-    try:
-        r = subprocess.run(
-            ["bash", match, path or "", cmd or ""],
-            capture_output=True, text=True, timeout=5, cwd=cwd,
-        )
-        out = (r.stdout or "").strip()
-        if out:
-            notes.append(out)
-    except Exception:
-        pass
+if [[ -n "$LORE_PATH" ]]; then
+  if json="$(lore_event after_edit --cwd "$LORE_CWD" --path "$LORE_PATH" ${LORE_CMD:+--cmd "$LORE_CMD"} 2>/dev/null)"; then
+    ctx="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("additional_context",""))' 2>/dev/null || true)"
+    [[ -n "$ctx" ]] && notes+=("$ctx")
+  fi
+elif [[ -n "$LORE_CMD" ]]; then
+  if json="$(lore_event after_shell --cwd "$LORE_CWD" --cmd "$LORE_CMD" 2>/dev/null)"; then
+    ctx="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("additional_context",""))' 2>/dev/null || true)"
+    [[ -n "$ctx" ]] && notes+=("$ctx")
+  fi
+fi
 
-stamp = Path("/tmp/.lore-cursor-check")
-now = int(time.time())
-last = 0
+stamp="/tmp/.lore-cursor-check"
+now="$(date +%s)"
+last=0
+[[ -f "$stamp" ]] && last="$(cat "$stamp" 2>/dev/null || echo 0)"
+if (( now - last >= 300 )); then
+  echo "$now" > "$stamp" 2>/dev/null || true
+  if json="$(lore_event health --cwd "$LORE_CWD" 2>/dev/null)"; then
+    hctx="$(printf '%s' "$json" | python3 -c '
+import json, sys
 try:
-    last = int(stamp.read_text().strip() or "0")
+    r = json.load(sys.stdin)
+    w = r.get("warnings") or []
+    if not w:
+        raise SystemExit(0)
+    text = "\n".join(w)
+    if "not found" in text:
+        raise SystemExit(0)
+    print("[lore] health:\n" + text[:1200])
+except SystemExit:
+    raise
 except Exception:
     pass
-if now - last >= 300:
-    try:
-        stamp.write_text(str(now))
-    except Exception:
-        pass
-    health = os.path.expanduser("~/.agents/skills/lore/scripts/on-session-start.sh")
-    if os.path.isfile(health):
-        try:
-            r = subprocess.run(
-                ["bash", health, cwd],
-                capture_output=True, text=True, timeout=8,
-            )
-            out = (r.stdout or r.stderr or "").strip()
-            if out and "⚠" in out and "not found" not in out:
-                notes.append("[lore] health:\n" + out[:1200])
-        except Exception:
-            pass
+' 2>/dev/null || true)"
+    [[ -n "$hctx" ]] && notes+=("$hctx")
+  fi
+fi
 
-if notes:
-    print(json.dumps({"additional_context": "\n\n".join(notes)}, ensure_ascii=False))
-else:
-    print("{}")
-PY
+if (( ${#notes[@]} > 0 )); then
+  export LORE_NOTES
+  LORE_NOTES="$(printf '%s\0' "${notes[@]}")"
+  python3 -c '
+import json, os
+parts = [p for p in os.environ.get("LORE_NOTES", "").split("\0") if p]
+print(json.dumps({"additional_context": "\n\n".join(parts)}, ensure_ascii=False))
+' 2>/dev/null || echo '{}'
+else
+  echo '{}'
+fi

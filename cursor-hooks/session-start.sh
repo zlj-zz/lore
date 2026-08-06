@@ -1,109 +1,50 @@
 #!/usr/bin/env bash
-# lore Cursor hook: sessionStart — inject KB context + behavioral rules.
-# stdin: Cursor hook JSON. stdout: {"additional_context": "..."}. Never blocks.
-set -euo pipefail
+# lore Cursor hook: sessionStart — inject KB context via lore-event.
+# stdin: Cursor hook JSON. stdout: {"additional_context", "env"} or {}.
+set -uo pipefail
 
-export LORE_PAYLOAD
-LORE_PAYLOAD="$(cat)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+# shellcheck source=../adapters/common.sh
+source "$ROOT/adapters/common.sh"
 
-python3 <<'PY'
-import json, os, subprocess
+payload="$(cat || true)"
+cwd="$(printf '%s' "$payload" | python3 -c '
+import json, sys
 from pathlib import Path
+try:
+    p = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+roots = p.get("workspace_roots") or []
+cwd = p.get("cwd") or (roots[0] if roots else "")
+if cwd:
+    print(str(Path(cwd).resolve()))
+' 2>/dev/null)" || true
 
-payload = json.loads(os.environ.get("LORE_PAYLOAD") or "{}")
-roots = payload.get("workspace_roots") or []
-cwd = payload.get("cwd") or (roots[0] if roots else os.getcwd())
-cwd = str(Path(cwd).resolve())
+if [[ -z "${cwd:-}" ]]; then
+  echo '{}'
+  exit 0
+fi
 
-RULES = """## Knowledge Base (lore)
+if ! json="$(lore_event session_start --cwd "$cwd" 2>/dev/null)"; then
+  echo '{}'
+  exit 0
+fi
 
-On session start: CONTEXT.md is injected below when present. Output 📚 lore loaded.
-
-During work:
-- Writing code → check .pikb/CONVENTIONS.md
-- Multi-module changes → check .pikb/MAP.md
-- Error / risky edit → check .pikb/PITFALLS.md (and .pi/kb/PITFALLS.md)
-- New repo → create .pi/kb/CONTEXT.md
-- Significant change → ask: "knowledge base 需要更新吗?"
-
-Search KB: `~/.agents/skills/lore/scripts/quick-ref.sh <keyword>`
-Missing KB in complex workspace → `/skill:lore 创建知识库`"""
-
-
-def find_context(start):
-    cur = start
-    for _ in range(8):
-        ctx = cur / ".pi" / "kb" / "CONTEXT.md"
-        if ctx.is_file():
-            return ctx
-        if cur.parent == cur:
-            break
-        cur = cur.parent
-    return None
-
-
-def find_map(start, ctx):
-    seen = set()
-    candidates = [start / ".pikb" / "MAP.md", start.parent / ".pikb" / "MAP.md"]
-    if ctx is not None:
-        # repo/.pi/kb/CONTEXT.md → workspace .pikb one or two levels up
-        if len(ctx.parents) > 2:
-            candidates.append(ctx.parents[2] / ".pikb" / "MAP.md")
-        if len(ctx.parents) > 3:
-            candidates.append(ctx.parents[3] / ".pikb" / "MAP.md")
-    for c in candidates:
-        try:
-            key = str(c.resolve())
-        except Exception:
-            continue
-        if key in seen:
-            continue
-        seen.add(key)
-        if c.is_file():
-            return c
-    return None
-
-
-parts = [RULES]
-ctx = find_context(Path(cwd))
-if ctx:
-    text = ctx.read_text(encoding="utf-8", errors="replace")[:2048]
-    parts.append("📚 lore loaded\n\n# CONTEXT.md (%s)\n\n%s" % (ctx, text))
-    if "@workspace" in text or ".pikb" in text:
-        mp = find_map(Path(cwd), ctx)
-        if mp:
-            lines = mp.read_text(encoding="utf-8", errors="replace").splitlines()[:80]
-            parts.append("## Workspace Map (summary)\n\n" + "\n".join(lines))
-else:
-    parts.append(
-        "[lore] No .pi/kb/CONTEXT.md under %s. "
-        "Run /skill:lore 创建知识库 if this is a multi-repo workspace." % cwd
-    )
-
-health_script = Path(os.path.expanduser("~/.agents/skills/lore/scripts/on-session-start.sh"))
-if health_script.is_file():
-    try:
-        r = subprocess.run(
-            ["bash", str(health_script), cwd],
-            capture_output=True, text=True, timeout=8,
-        )
-        out = (r.stdout or r.stderr or "").strip()
-        if out and ("⚠" in out or r.returncode != 0):
-            if "not found" not in out or ctx is not None:
-                parts.append("[lore] health:\n" + out[:1500])
-    except Exception:
-        pass
-
-# Cursor has a known race where sessionStart additional_context is dropped.
-# env is a more reliable channel; rules/AGENTS.md remain the durable fallback.
-ctx_path = str(ctx) if ctx else ""
-out = {
-    "additional_context": "\n\n".join(parts),
-    "env": {
-        "LORE_LOADED": "1" if ctx else "0",
-        "LORE_CONTEXT": ctx_path,
-        "LORE_CWD": cwd,
-    },
-}
-print(json.dumps(out, ensure_ascii=False))
-PY
+printf '%s' "$json" | python3 -c '
+import json, sys
+try:
+    r = json.load(sys.stdin)
+    print(json.dumps({
+        "additional_context": r.get("additional_context", ""),
+        "env": r.get("env") or {},
+    }, ensure_ascii=False))
+except Exception:
+    print("{}")
+' 2>/dev/null || echo '{}'
