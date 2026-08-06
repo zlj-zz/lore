@@ -214,6 +214,22 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 
 ---
 
+## 使用脚本
+
+| 脚本 | 用途 | 场景 |
+|------|------|------|
+| `scripts/scan-workspace.sh` | 工作区结构快照 | 初始化 Step 1 |
+| `scripts/on-session-start.sh` | KB 健康检查 | 会话启动（AGENTS.md / hook） |
+| `scripts/quick-ref.sh <keyword>` | KB 关键词检索 | 按需查找，节省 token |
+
+### 会话启动集成
+
+在 `AGENTS.md` 或 PostToolUse hook 中调用：
+
+```bash
+./scripts/on-session-start.sh || echo "[lore] run /skill:lore 创建知识库 to initialize"
+```
+
 ## 跨 Agent
 
 `./install.sh` 自动配置加载规则。也可手动添加——见 [AGENTS.md](./AGENTS.md)。
