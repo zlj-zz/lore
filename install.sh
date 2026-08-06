@@ -328,6 +328,24 @@ do_install() {
       fi
       ;;
     hook)
+      # Claude Code skill symlink
+      local claude_skill_dir="${HOME}/.claude/skills/$SKILL_NAME"
+      mkdir -p "$(dirname "$claude_skill_dir")"
+      if [[ -L "$claude_skill_dir" ]]; then
+        local ct
+        ct="$(realpath_py "$claude_skill_dir")"
+        if [[ "$ct" == "$(realpath_py "$ROOT")" ]]; then
+          _single_line "$(_icon skip)" "claude skill" "${C_DIM}already linked${C_RESET}"
+        else
+          _single_line "$(_icon conflict)" "claude skill" "${C_YELLOW}points to $ct${C_RESET}"
+        fi
+      elif [[ -e "$claude_skill_dir" ]]; then
+        _single_line "$(_icon conflict)" "claude skill" "${C_YELLOW}real path exists${C_RESET}"
+      else
+        ln -s "$ROOT" "$claude_skill_dir"
+        _single_line "$(_icon linked)" "claude skill" "${C_DIM}$claude_skill_dir → $ROOT${C_RESET}"
+      fi
+
       if [[ -f "$HOOKS_FILE" ]]; then
         if _hook_has_lore; then
           _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}already in settings.json${C_RESET}"
@@ -406,6 +424,19 @@ do_uninstall() {
       fi
       ;;
     hook)
+      local claude_skill_dir="${HOME}/.claude/skills/$SKILL_NAME"
+      if [[ -L "$claude_skill_dir" ]]; then
+        local ct
+        ct="$(realpath_py "$claude_skill_dir")"
+        if [[ "$ct" == "$(realpath_py "$ROOT")" ]]; then
+          [[ "$DRY_RUN" -eq 1 ]] || rm "$claude_skill_dir"
+          _single_line "$(_icon unlinked)" "claude skill" "${C_DIM}removed${C_RESET}"
+        else
+          _single_line "$(_icon skip)" "claude skill" "${C_DIM}not our link${C_RESET}"
+        fi
+      else
+        _single_line "$(_icon skip)" "claude skill" "${C_DIM}not installed${C_RESET}"
+      fi
       if _hook_has_lore; then
         _hook_remove
         _single_line "$(_icon unlinked)" "PostToolUse hook" "${C_DIM}removed from settings.json${C_RESET}"
@@ -475,6 +506,10 @@ do_status() {
       fi
       ;;
     hook)
+      local claude_skill_dir="${HOME}/.claude/skills/$SKILL_NAME"
+      if [[ -L "$claude_skill_dir" ]] && [[ "$(realpath_py "$claude_skill_dir")" == "$(realpath_py "$ROOT")" ]]; then
+        _single_line "$(_icon linked)" "claude skill" "${C_DIM}installed${C_RESET}"
+      fi
       if _hook_has_lore; then
         _single_line "$(_icon linked)" "PostToolUse hook" "${C_DIM}installed${C_RESET}"
       else
@@ -515,7 +550,7 @@ ${C_BOLD}Flags:${C_RESET}
 
 ${C_BOLD}What gets installed per agent:${C_RESET}
   pi       AGENTS.md rules + pi extension symlink + skill symlink
-  claude   AGENTS.md rules + PostToolUse hook in settings.json + skill symlink
+  claude   AGENTS.md rules + PostToolUse hook + skill symlink (~/.claude/skills/)
   cursor   .cursorrules + skill symlink
 
 ${C_BOLD}Examples:${C_RESET}
