@@ -212,15 +212,24 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 - 是否改了 API 签名 / 数据模型？ → 更新 MAP.md 相关条目
 - 是否引入了新模式？ → 补 CONVENTIONS.md
 
+定期运行质量检查：
+
+```bash
+scripts/check-staleness.sh   # KB 是否过期
+scripts/audit-kb.sh          # KB 质量审计
+```
+
 ---
 
 ## 使用脚本
 
-| 脚本 | 用途 | 场景 |
+| 脚本 | 用途 | 阶段 |
 |------|------|------|
-| `scripts/scan-workspace.sh` | 工作区结构快照 | 初始化 Step 1 |
-| `scripts/on-session-start.sh` | KB 健康检查 | 会话启动（AGENTS.md / hook） |
-| `scripts/quick-ref.sh <keyword>` | KB 关键词检索 | 按需查找，节省 token |
+| `scripts/scan-workspace.sh` | 工作区结构快照 | 创建 |
+| `scripts/on-session-start.sh` | KB 健康检查 | 使用 |
+| `scripts/quick-ref.sh <keyword>` | KB 关键词检索 | 使用 |
+| `scripts/check-staleness.sh` | 检测 KB 过期（新仓库/引用变更） | 维护 |
+| `scripts/audit-kb.sh` | KB 质量审计（交叉引用/字段完整/死链接） | 维护 |
 
 ### 会话启动集成
 
