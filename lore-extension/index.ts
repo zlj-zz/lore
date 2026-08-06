@@ -2,7 +2,7 @@
  * lore — pi Extension
  *
  * KB status checks + /lore commands + passive monitoring.
- * Reads from ~/.agents/skills/lore/scripts/ for all functionality.
+ * Runtime events via bin/lore-event; legacy scripts for /lore commands.
  *
  * NOTE: Persistent setWidget disabled — multiple belowEditor widgets
  * may trigger pi editor autocomplete crash. Re-enable when resolved.
@@ -18,6 +18,18 @@ const SCRIPT_DIR = join(homedir(), ".agents", "skills", "lore", "scripts");
 const WIDGET_ID = "lore-status";
 const REFRESH_INTERVAL = 5;
 
+interface LoreEventResult {
+  ok?: boolean;
+  event?: string;
+  cwd?: string;
+  status?: string;
+  context_path?: string | null;
+  additional_context?: string;
+  warnings?: string[];
+  env?: Record<string, string>;
+  matches?: Array<{ id: string; title: string; difficulty: number }>;
+}
+
 interface KbStatus {
   healthy: boolean;
   repos: number;
@@ -27,6 +39,52 @@ interface KbStatus {
 }
 let cached: KbStatus | null = null;
 let turnsSinceRefresh = 0;
+
+function loreRoot(): string | null {
+  const cands = [
+    process.env.LORE_ROOT,
+    join(homedir(), ".agents", "skills", "lore"),
+  ].filter(Boolean) as string[];
+  for (const c of cands) {
+    if (existsSync(join(c, "bin", "lore-event"))) return c;
+    if (existsSync(join(c, "runtime", "lore_runtime", "cli.py"))) return c;
+  }
+  return null;
+}
+
+function shellQuote(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function runLoreEvent(
+  event: string,
+  opts: { cwd?: string; path?: string; cmd?: string } = {},
+): LoreEventResult | null {
+  const root = loreRoot();
+  if (!root) return null;
+
+  const parts = [event];
+  if (opts.cwd) parts.push("--cwd", opts.cwd);
+  if (opts.path) parts.push("--path", opts.path);
+  if (opts.cmd) parts.push("--cmd", opts.cmd);
+  const args = parts.map(shellQuote).join(" ");
+
+  const bin = join(root, "bin", "lore-event");
+  const cmd = existsSync(bin)
+    ? `${shellQuote(bin)} ${args}`
+    : `PYTHONPATH=${shellQuote(join(root, "runtime"))} python3 -m lore_runtime ${args}`;
+
+  try {
+    const output = execSync(cmd, {
+      encoding: "utf-8",
+      timeout: 5000,
+      cwd: opts.cwd || process.cwd(),
+    });
+    return parseJson(output.trim());
+  } catch {
+    return null;
+  }
+}
 
 function hasScript(name: string): boolean {
   return existsSync(join(SCRIPT_DIR, name));
@@ -53,7 +111,22 @@ function parseJson(output: string): any | null {
   try { return JSON.parse(output); } catch { return null; }
 }
 
-function refreshStatus(): KbStatus {
+function refreshStatus(cwd?: string): KbStatus {
+  const workCwd = cwd || process.cwd();
+  const result = runLoreEvent("health", { cwd: workCwd });
+
+  if (result) {
+    const hasKB = result.status !== "missing" || !!result.context_path;
+    return {
+      healthy: result.status === "healthy",
+      repos: 0,
+      age: null,
+      issues: result.warnings || [],
+      hasKB,
+    };
+  }
+
+  // Fallback: legacy on-session-start.sh
   const status = runScript("on-session-start.sh");
   if (!status.ok) return { healthy: false, repos: 0, age: null, issues: [], hasKB: false };
 
@@ -108,7 +181,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("lore", {
     description: "Check knowledge base status",
     async handler(_args, ctx) {
-      cached = refreshStatus();
+      cached = refreshStatus(ctx.cwd);
       if (!cached.hasKB) {
         ctx.ui.notify("[lore] No knowledge base — run /skill:lore 创建知识库", "info");
       } else if (cached.healthy) {
@@ -122,11 +195,20 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("lore-detail", {
     description: "Show full knowledge base status",
     async handler(_args, ctx) {
-      const status = runScript("on-session-start.sh");
-      if (status.ok) {
-        ctx.ui.notify(status.output, kbOk(status.output) ? "info" : "warn");
+      const cwd = ctx.cwd || process.cwd();
+      const result = runLoreEvent("health", { cwd });
+      if (result) {
+        const lines = result.warnings?.length
+          ? result.warnings.map(w => `⚠ ${w}`)
+          : [`status: ${result.status}`];
+        ctx.ui.notify(lines.join("\n"), result.status === "healthy" ? "info" : "warn");
       } else {
-        ctx.ui.notify("[lore] No knowledge base found. Run /skill:lore 创建知识库", "info");
+        const status = runScript("on-session-start.sh");
+        if (status.ok) {
+          ctx.ui.notify(status.output, kbOk(status.output) ? "info" : "warn");
+        } else {
+          ctx.ui.notify("[lore] No knowledge base found. Run /skill:lore 创建知识库", "info");
+        }
       }
     },
   });
@@ -164,117 +246,62 @@ export default function (pi: ExtensionAPI) {
   // ── Session start ──
 
   pi.on("session_start", async (_event, ctx) => {
-    // Auto-inject knowledge base content
     const cwd = ctx.cwd || process.cwd();
-    const contextPath = join(cwd, ".pi", "kb", "CONTEXT.md");
+    const result = runLoreEvent("session_start", { cwd });
 
-    if (existsSync(contextPath)) {
-      let kbContent = readFileSync(contextPath, "utf-8").slice(0, 2048);
-
-      // If CONTEXT.md references workspace, inject MAP summary too
-      if (kbContent.includes("@workspace") || kbContent.includes(".pikb")) {
-        const mapPath = join(cwd, "..", ".pikb", "MAP.md");
-        if (existsSync(mapPath)) {
-          const mapLines = readFileSync(mapPath, "utf-8")
-            .split("\n")
-            .slice(0, 80)
-            .join("\n");
-          kbContent += `\n\n## Workspace Map (summary)\n${mapLines}`;
-        }
-      }
-
+    if (result?.additional_context) {
       pi.sendMessage(
-        { customType: "lore-kb-context", content: `[Knowledge Base]\n\n${kbContent}`, display: false },
+        { customType: "lore-kb-context", content: result.additional_context, display: false },
         { triggerTurn: false },
       );
+    }
+
+    if (result?.env?.LORE_LOADED === "1") {
       ctx.ui.notify("📚 lore loaded", "info");
       ctx.ui.setStatus("lore", "📚 l");
     } else {
       ctx.ui.setStatus("lore", undefined);
     }
 
-    // Load pitfalls for trigger matching
-    loadPitfalls(cwd);
-
-    // Health check
-    if (!hasScript("on-session-start.sh")) return;
-    cached = refreshStatus();
+    cached = refreshStatus(cwd);
     if (cached.hasKB && cached.issues.length > 0) {
       ctx.ui.notify(`[lore] ⚠ ${cached.issues[0]}`, "warn");
     }
   });
 
-  // ── L2: Triggers matching ──────────────────────────────────────────
+  // ── L2: Triggers matching (via lore-event) ──
 
-  // Cache: parsed pitfalls with triggers
-  interface PitfallEntry { id: number; title: string; difficulty: number; fileTriggers: string[]; apiTriggers: string[]; cmdTriggers: string[] }
-  let pitfalls: PitfallEntry[] = [];
-  let matchedPitfalls: number[] = []; // IDs matched this turn, injected before next agent run
-
-  function loadPitfalls(cwd: string): void {
-    pitfalls = [];
-    const files = [join(cwd, "..", ".pikb", "PITFALLS.md"), join(cwd, ".pi", "kb", "PITFALLS.md")];
-    for (const f of files) {
-      if (!existsSync(f)) continue;
-      const raw = readFileSync(f, "utf-8");
-      // Parse: ## N. Title ... Triggers: `file:x` | `api:y` | `cmd:z`
-      const sections = raw.split(/^## /gm).slice(1);
-      for (const sec of sections) {
-        const m = sec.match(/^(\d+)\.\s*(.+)/m);
-        if (!m) continue;
-        const id = parseInt(m[1]);
-        const title = m[2].trim();
-        const diffMatch = sec.match(/Difficulty:\s*⭐+/);
-        const difficulty = diffMatch ? diffMatch[0].match(/⭐/g)!.length : 1;
-        const trigMatch = sec.match(/Triggers:\s*(.+)/);
-        if (!trigMatch) continue;
-        const trigStr = trigMatch[1];
-        const fileTriggers: string[] = [];
-        const apiTriggers: string[] = [];
-        const cmdTriggers: string[] = [];
-        for (const t of trigStr.split(/\s*\|\s*/)) {
-          const cleaned = t.replace(/`/g, "");
-          if (cleaned.startsWith("file:")) fileTriggers.push(cleaned.slice(5));
-          else if (cleaned.startsWith("api:")) apiTriggers.push(cleaned.slice(4));
-          else if (cleaned.startsWith("cmd:")) cmdTriggers.push(cleaned.slice(4));
-        }
-        pitfalls.push({ id, title, difficulty, fileTriggers, apiTriggers, cmdTriggers });
-      }
-    }
-  }
-
-  function matchPitfall(path: string, cmd: string): void {
-    for (const p of pitfalls) {
-      if (path && p.fileTriggers.some((t) => path.includes(t))) matchedPitfalls.push(p.id);
-      if (cmd && p.cmdTriggers.some((t) => cmd.includes(t))) matchedPitfalls.push(p.id);
-    }
-    matchedPitfalls = [...new Set(matchedPitfalls)];
-  }
+  let pendingPitfallContext = "";
+  let matchedPitfallIds: string[] = [];
 
   pi.on("tool_call", async (event, ctx) => {
-    if (pitfalls.length === 0) return;
+    const cwd = ctx.cwd || process.cwd();
     const path = event.input?.path as string | undefined;
     const cmd = event.toolName === "bash" ? (event.input?.command as string | undefined) : undefined;
-    matchPitfall(path ?? "", cmd ?? "");
-    if (matchedPitfalls.length > 0) {
-      const titles = matchedPitfalls.map((id) => pitfalls.find((p) => p.id === id)?.title).filter(Boolean);
-      ctx.ui.setStatus("lore", `📚 l ⚠`);
-      ctx.ui.notify(`[lore] ⚠ PITFALLS #${matchedPitfalls.join(",#")}: ${titles.join("; ")}`, "warn");
-    }
+    if (!path && !cmd) return;
+
+    const result = path
+      ? runLoreEvent("after_edit", { cwd, path, cmd })
+      : runLoreEvent("after_shell", { cwd, cmd: cmd! });
+
+    if (!result?.matches?.length) return;
+
+    matchedPitfallIds = result.matches.map(m => m.id);
+    pendingPitfallContext = result.additional_context || "";
+    const titles = result.matches.map(m => m.title).filter(Boolean);
+    ctx.ui.setStatus("lore", `📚 l ⚠`);
+    ctx.ui.notify(`[lore] ⚠ PITFALLS #${matchedPitfallIds.join(",#")}: ${titles.join("; ")}`, "warn");
   });
 
-  // Inject matched pitfalls into context
   pi.on("before_agent_start", async () => {
-    if (matchedPitfalls.length === 0) return;
-    const warnings = matchedPitfalls.map((id) => {
-      const p = pitfalls.find((pp) => pp.id === id);
-      return p ? `⚠ PITFALLS #${p.id}: ${p.title} (Difficulty: ${"⭐".repeat(p.difficulty)})` : "";
-    }).filter(Boolean).join("\n");
-    matchedPitfalls = []; // reset after inject
+    if (!pendingPitfallContext && matchedPitfallIds.length === 0) return;
+    const content = pendingPitfallContext;
+    pendingPitfallContext = "";
+    matchedPitfallIds = [];
     return {
       message: {
         customType: "lore-pitfalls-warning",
-        content: `[lore] 以下 PITFALLS 与当前改动相关，请先阅读：\n\n${warnings}`,
+        content,
         display: false,
       },
     };
@@ -287,16 +314,12 @@ export default function (pi: ExtensionAPI) {
     if (turnsSinceRefresh < REFRESH_INTERVAL) return;
     turnsSinceRefresh = 0;
 
-    // Staleness check
-    if (hasScript("on-session-start.sh")) {
-      cached = refreshStatus();
-      if (cached.hasKB && cached.issues.length > 0) {
-        ctx.ui.notify(`[lore] ⚠ ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
-      }
+    const cwd = ctx.cwd || process.cwd();
+    cached = refreshStatus(cwd);
+    if (cached.hasKB && cached.issues.length > 0) {
+      ctx.ui.notify(`[lore] ⚠ ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
     }
 
-    // Error log check
-    const cwd = ctx.cwd || process.cwd();
     const logFile = join(cwd, ".pi", "kb", ".error-log.jsonl");
     if (existsSync(logFile)) {
       const count = readFileSync(logFile, "utf-8").split("\n").filter(Boolean).length;
@@ -309,7 +332,6 @@ export default function (pi: ExtensionAPI) {
   // ── Tool end: detect new repo ──
 
   pi.on("tool_execution_end", async (event, ctx) => {
-    // L3: Error logging
     if (event.isError) {
       const cwd = ctx.cwd || process.cwd();
       const logDir = join(cwd, ".pi", "kb");
