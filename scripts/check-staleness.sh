@@ -221,7 +221,30 @@ if kb_age_days is not None:
     else:
         fresh.append(f"KB age: {kb_age_days:.0f}d")
 
-# ── 4. Detect vanished repos ──
+# ── 4. PITFALLS Triggers completeness ──
+pitfalls_file = os.path.join(pikb, "PITFALLS.md")
+if os.path.isfile(pitfalls_file):
+    with open(pitfalls_file) as f:
+        content = f.read()
+    missing_triggers = []
+    for m in re.finditer(r'^## (\d+)\. (.+)$', content, re.MULTILINE):
+        pid, title = m.group(1), m.group(2)
+        end = content.find('\n## ', m.end())
+        if end == -1: end = len(content)
+        section = content[m.end():end]
+        if 'Triggers:' not in section:
+            missing_triggers.append(f'#{pid} {title}')
+    if missing_triggers:
+        issues.append({
+            "check": "PITFALLS Triggers",
+            "severity": "warning",
+            "detail": f"{len(missing_triggers)} entry(s) missing Triggers: {missing_triggers[0]}",
+            "action": "add Triggers: to PITFALLS entries"
+        })
+    else:
+        fresh.append("PITFALLS Triggers: all complete")
+
+# ── 5. Detect vanished repos ──
 # repos that have CONTEXT.md but no longer exist
 for root, dirs, fnames in os.walk(os.path.join(workspace, ".pi")):
     for d in dirs[:]:
