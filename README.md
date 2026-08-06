@@ -93,15 +93,18 @@ After that, every session starts with context already loaded.
 
 ## Agents
 
-| Agent | Install target |
-|-------|---------------|
-| pi | `AGENTS.md` rules + extension |
-| Claude Code | `CLAUDE.md` rules + PostToolUse hook |
-| Cursor | `~/.cursor/hooks.json` (`sessionStart` + `postToolUse`) + hook scripts |
+KB bootstrap, PITFALLS matching, and health checks share one Python runtime (`runtime/lore_runtime`) invoked via **`bin/lore-event`**. Agent hooks and the pi extension are thin adapters only — domain logic lives in the runtime. See [docs/adapters.md](docs/adapters.md) for the full capability matrix.
+
+| Agent | Install target | Runtime adapter |
+|-------|---------------|-----------------|
+| pi | `AGENTS.md` rules + extension | `lore-extension/` spawns `bin/lore-event` |
+| Claude Code | `CLAUDE.md` rules + PostToolUse hook | `install.sh` → throttled `lore-event health` |
+| Cursor | `~/.cursor/hooks.json` (`sessionStart` + `postToolUse`) | `cursor-hooks/` → `adapters/common.sh` → `lore-event` |
 
 ```bash
 ./install.sh --to pi,claude    # specific
 ./install.sh status --all       # see what's installed
+bin/lore-event session_start --cwd .   # smoke-test runtime JSON
 ```
 
 Cursor notes:
