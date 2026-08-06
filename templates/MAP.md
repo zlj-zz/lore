@@ -23,6 +23,19 @@
 |------|-----|------|
 | | | |
 
+## Key Flows
+<!-- 2-3 critical business flows, tracing the full call chain -->
+
+### Flow Name
+```
+API: handler → Aggr: logic → Domain: dal
+```
+| Step | Service | Action | Data Transform |
+|------|---------|--------|---------------|
+| 1 | | | |
+
+Pitfall: [PITFALLS #N](./PITFALLS.md)
+
 ## External Systems
 
 | System | Direction | Integration Point |

@@ -160,8 +160,11 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 - Symptom: 现象
 - Root Cause: 根因
 - Solution: 正确做法
+- Triggers: `file_pattern` | `api_path` | `command:regex`
 - Related: 参见 [CONVENTIONS §X](./CONVENTIONS.md#...)
 ```
+
+`Triggers` 是可选字段，用于 Extension 自动匹配（如匹配到"修改 dealer_device_list.go"自动警告 PITFALLS #3）。至少填一个：文件路径片段、API 路径、bash 命令模式。
 
 ### MAP.md 仓库条目格式
 
@@ -170,6 +173,8 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 |------|----|------|----------|
 | api-gateway | API | 路由、鉴权 | internal/middleware/, internal/handler/ |
 ```
+
+额外要求：记录 **2-3 条关键业务流程**（完整调用链 + 每步数据转换）。
 
 ### CONTEXT.md 最小内容
 
@@ -182,6 +187,12 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 - 主程序: main.go
 - 配置: etc/
 - @workspace → ../.pikb/MAP.md
+
+## Hotspots
+<!-- 常改、复杂、高风险的文件 -->
+| File | Why |
+|------|-----|
+| | |
 ```
 
 ---

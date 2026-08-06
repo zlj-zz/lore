@@ -15,6 +15,13 @@
 |------|---------|
 | | |
 
+## Hotspots
+<!-- frequently changed, complex, or high-risk files -->
+
+| File | Why |
+|------|-----|
+| | |
+
 ## Dependencies
 
 | Repo | How |
