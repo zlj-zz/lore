@@ -187,8 +187,8 @@ export default function (pi: ExtensionAPI) {
         { customType: "lore-kb-context", content: `[Knowledge Base]\n\n${kbContent}`, display: false },
         { triggerTurn: false },
       );
-      ctx.ui.notify(`📚 lore loaded`, "info");
-      ctx.ui.setStatus("lore", "📚");
+      ctx.ui.notify("📚 lore loaded", "info");
+      ctx.ui.setStatus("lore", "📚 l");
     } else {
       ctx.ui.setStatus("lore", undefined);
     }
