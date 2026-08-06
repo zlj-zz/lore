@@ -286,10 +286,23 @@ export default function (pi: ExtensionAPI) {
     turnsSinceRefresh++;
     if (turnsSinceRefresh < REFRESH_INTERVAL) return;
     turnsSinceRefresh = 0;
-    cached = refreshStatus();
 
-    if (cached.hasKB && cached.issues.length > 0) {
-      ctx.ui.notify(`[lore] ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
+    // Staleness check
+    if (hasScript("on-session-start.sh")) {
+      cached = refreshStatus();
+      if (cached.hasKB && cached.issues.length > 0) {
+        ctx.ui.notify(`[lore] ⚠ ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
+      }
+    }
+
+    // Error log check
+    const cwd = ctx.cwd || process.cwd();
+    const logFile = join(cwd, ".pi", "kb", ".error-log.jsonl");
+    if (existsSync(logFile)) {
+      const count = readFileSync(logFile, "utf-8").split("\n").filter(Boolean).length;
+      if (count > 0) {
+        ctx.ui.notify(`[lore] 📋 ${count} errors in log — /skill:lore 检查是否需要更新 PITFALLS`, "info");
+      }
     }
   });
 
