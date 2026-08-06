@@ -272,7 +272,8 @@ export default function (pi: ExtensionAPI) {
   // ── L2: Triggers matching (via lore-event) ──
 
   let pendingPitfallContext = "";
-  let matchedPitfallIds: string[] = [];
+  const matchedPitfallIds = new Set<string>();
+  const matchedPitfallTitles = new Set<string>();
 
   pi.on("tool_call", async (event, ctx) => {
     const cwd = ctx.cwd || process.cwd();
@@ -286,18 +287,29 @@ export default function (pi: ExtensionAPI) {
 
     if (!result?.matches?.length) return;
 
-    matchedPitfallIds = result.matches.map(m => m.id);
-    pendingPitfallContext = result.additional_context || "";
-    const titles = result.matches.map(m => m.title).filter(Boolean);
+    for (const m of result.matches) {
+      matchedPitfallIds.add(m.id);
+      if (m.title) matchedPitfallTitles.add(m.title);
+    }
+    const ctxBlock = result.additional_context || "";
+    if (ctxBlock) {
+      pendingPitfallContext = pendingPitfallContext
+        ? `${pendingPitfallContext}\n\n${ctxBlock}`
+        : ctxBlock;
+    }
     ctx.ui.setStatus("lore", `📚 l ⚠`);
-    ctx.ui.notify(`[lore] ⚠ PITFALLS #${matchedPitfallIds.join(",#")}: ${titles.join("; ")}`, "warn");
+    ctx.ui.notify(
+      `[lore] ⚠ PITFALLS #${[...matchedPitfallIds].join(",#")}: ${[...matchedPitfallTitles].join("; ")}`,
+      "warn",
+    );
   });
 
   pi.on("before_agent_start", async () => {
-    if (!pendingPitfallContext && matchedPitfallIds.length === 0) return;
+    if (!pendingPitfallContext && matchedPitfallIds.size === 0) return;
     const content = pendingPitfallContext;
     pendingPitfallContext = "";
-    matchedPitfallIds = [];
+    matchedPitfallIds.clear();
+    matchedPitfallTitles.clear();
     return {
       message: {
         customType: "lore-pitfalls-warning",

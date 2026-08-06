@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from lore_runtime.types import empty_result, STATUS_HEALTHY, STATUS_DEGRADED, STATUS_MISSING
+from lore_runtime.types import empty_result
 from lore_runtime import health as health_mod
 from lore_runtime import discover
 from lore_runtime import context as context_mod
@@ -32,10 +32,22 @@ def _pitfalls_event(event: str, cwd: str, path: str, cmd: str) -> dict:
     return r
 
 
+def _format_health_notes(status: str, warnings: list) -> str:
+    if status == "healthy" or not warnings:
+        return ""
+    filtered = [w for w in warnings if "not found" not in w]
+    if not filtered:
+        return ""
+    return "[lore] health:\n" + "\n".join(filtered)[:1200]
+
+
 def _session_start_event(cwd: str) -> dict:
     r = empty_result("session_start", cwd)
     h = health_mod.check(cwd)
     text, ctx_path, ctx_warnings = context_mod.build_session_additional_context(cwd)
+    health_notes = _format_health_notes(h["status"], h["warnings"])
+    if health_notes:
+        text = (text + "\n\n" + health_notes) if text else health_notes
     r["additional_context"] = text
     r["context_path"] = ctx_path
     r["status"] = h["status"]
@@ -53,6 +65,7 @@ def _health_event(cwd: str) -> dict:
     h = health_mod.check(cwd)
     r["status"] = h["status"]
     r["warnings"] = h["warnings"]
+    r["ok_items"] = h["ok_items"]
     ctx = discover.find_context(cwd)
     r["context_path"] = str(ctx) if ctx else None
     r["env"] = {

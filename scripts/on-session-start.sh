@@ -75,12 +75,9 @@ def split_item(s):
 
 warnings = [split_item(w) for w in raw_warnings]
 
-sys.path.insert(0, os.path.join(os.environ["LORE_ROOT"], "runtime"))
-try:
-    from lore_runtime import health as health_mod
-    ok_items = [split_item(x) for x in health_mod.check(workspace)["ok_items"]]
-except Exception:
-    ok_items = []
+raw_ok = r.get("ok_items") or []
+ok_items = [split_item(x) for x in raw_ok]
+if not ok_items:
     if has_pikb:
         ok_items.append((".pikb/", "exists"))
     if context_path:

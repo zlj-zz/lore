@@ -37,6 +37,24 @@ class TestSessionStart(unittest.TestCase):
         self.assertEqual(r["env"]["LORE_LOADED"], "1")
         self.assertIn("Workspace Map", r["additional_context"])
 
+    def test_session_start_appends_health_notes_when_degraded(self):
+        from unittest.mock import patch
+
+        from lore_runtime.events import handle
+
+        warning = "KB age: oldest file modified 45d ago — may be stale"
+        with patch("lore_runtime.events.health_mod.check") as mock_check:
+            mock_check.return_value = {
+                "status": "degraded",
+                "warnings": [warning],
+                "ok_items": [],
+            }
+            r = handle("session_start", str(FIXTURE / "app"))
+        self.assertIn("[lore] health:", r["additional_context"])
+        self.assertIn(warning, r["additional_context"])
+        self.assertIn(warning, r["warnings"])
+        self.assertEqual(r["status"], "degraded")
+
 
 class TestPitfalls(unittest.TestCase):
     def test_after_edit_hit(self):
