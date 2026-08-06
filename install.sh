@@ -191,11 +191,14 @@ with open('$HOOKS_FILE') as f:
     cfg = json.load(f)
 for h in cfg.get('hooks', {}).get('PostToolUse', []):
     for inner in h.get('hooks', []):
-        if 'lore-loaded' in inner.get('command', ''):
+        cmd = inner.get('command', '')
+        if 'lore-loaded' in cmd or 'lore-check' in cmd:
             exit(0)
 exit(1)
 " 2>/dev/null
 }
+
+LORETHROTTLE=300  # seconds between checks
 
 _hook_add() {
   [[ -f "$HOOKS_FILE" ]] || return 1
@@ -205,14 +208,27 @@ with open('$HOOKS_FILE') as f:
     cfg = json.load(f)
 hooks = cfg.setdefault('hooks', {})
 ptu = hooks.setdefault('PostToolUse', [])
+# remove any old lore hooks (both v1 one-shot and v2 periodic patterns)
+new_ptu = []
 for h in ptu:
+    new_inner = []
     for inner in h.get('hooks', []):
-        if 'lore-loaded' in inner.get('command', ''):
-            exit(0)
-ptu.append({'matcher': '', 'hooks': [{'type': 'command', 'command': \"if [ ! -f /tmp/.lore-loaded ] && [ -f .pi/kb/CONTEXT.md ]; then echo '[lore] KB available — read .pi/kb/CONTEXT.md'; touch /tmp/.lore-loaded; fi\"}]})
+        cmd = inner.get('command', '')
+        if 'lore-loaded' not in cmd and 'lore-check' not in cmd:
+            new_inner.append(inner)
+    if new_inner:
+        h['hooks'] = new_inner
+        new_ptu.append(h)
+    elif h.get('matcher', '') != '':
+        new_ptu.append(h)
+ptu = new_ptu
+hooks['PostToolUse'] = ptu
+# add new periodic-check hook
+ptu.append({'matcher': '', 'hooks': [{'type': 'command', 'command': '[ -f \"$HOME/.agents/skills/lore/scripts/on-session-start.sh\" ] || return 0; STAMP=/tmp/.lore-check; NOW=$(date +%s); LAST=$(cat $STAMP 2>/dev/null || echo 0); [ $((NOW - LAST)) -lt 300 ] && return 0; echo $NOW > $STAMP; output=$(bash \"$HOME/.agents/skills/lore/scripts/on-session-start.sh\" 2>&1) || { echo \"$output\" | grep -q \"not found\" && return 0; echo \"[lore] $output\"; }'}]})
 with open('$HOOKS_FILE', 'w') as f:
     json.dump(cfg, f, indent=2)
     f.write('\n')
+print('added lore periodic-check hook (every 300s)')
 " 2>/dev/null
 }
 
