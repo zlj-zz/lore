@@ -226,6 +226,7 @@ scripts/audit-kb.sh          # KB 质量审计
 | 脚本 | 用途 | 阶段 |
 |------|------|------|
 | `scripts/scan-workspace.sh` | 工作区结构快照 | 创建 |
+| `scripts/graph.sh --embed` | 生成 Mermaid 依赖关系图 | 创建 |
 | `scripts/on-session-start.sh` | KB 健康检查 | 使用 |
 | `scripts/quick-ref.sh <keyword>` | KB 关键词检索 | 使用 |
 | `scripts/check-staleness.sh` | 检测 KB 过期（新仓库/引用变更） | 维护 |

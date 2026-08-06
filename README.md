@@ -39,6 +39,7 @@ cd ~/projects/lore
 
 ```bash
 /skill:lore 创建知识库     # initialize for current workspace
+./scripts/graph.sh --embed  # generate Mermaid dependency graph
 ./scripts/quick-ref.sh auth   # search KB for "auth"
 ./scripts/check-staleness.sh  # is KB up to date?
 ./scripts/audit-kb.sh         # quality check
@@ -78,6 +79,7 @@ After that, every session starts with context already loaded.
 | Script | Purpose |
 |--------|---------|
 | `scan-workspace.sh` | Detect repos, types, agent files — structured JSON |
+| `graph.sh --embed` | Generate Mermaid dependency graph for MAP.md |
 | `on-session-start.sh` | KB health check at session start |
 | `quick-ref.sh <keyword>` | Section-aware keyword search across KB |
 | `check-staleness.sh` | Detect stale entries (new repos, modified references) |

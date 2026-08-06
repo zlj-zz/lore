@@ -39,6 +39,7 @@ cd ~/projects/lore
 
 ```bash
 /skill:lore 创建知识库          # 初始化当前工作区
+./scripts/graph.sh --embed     # 生成 Mermaid 依赖关系图
 ./scripts/quick-ref.sh 支付      # 搜索 KB
 ./scripts/check-staleness.sh    # KB 是否过期
 ./scripts/audit-kb.sh           # 质量审计
@@ -78,6 +79,7 @@ workspace/
 | 脚本 | 用途 |
 |------|------|
 | `scan-workspace.sh` | 扫描工作区：识别仓库类型、agent 文件、文档 |
+| `graph.sh --embed` | 生成 Mermaid 依赖关系图，直接贴进 MAP.md |
 | `on-session-start.sh` | 会话启动时 KB 健康检查 |
 | `quick-ref.sh <关键词>` | 按段落搜索 KB 内容 |
 | `check-staleness.sh` | 检测过期：新仓库未覆盖、引用文件变更 |
