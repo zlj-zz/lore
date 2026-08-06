@@ -4,6 +4,7 @@ from lore_runtime.types import empty_result, STATUS_HEALTHY, STATUS_DEGRADED, ST
 from lore_runtime import health as health_mod
 from lore_runtime import discover
 from lore_runtime import context as context_mod
+from lore_runtime import pitfalls as pitfalls_mod
 
 
 def handle(event: str, cwd: str, path: str = None, cmd: str = None) -> dict:
@@ -12,9 +13,22 @@ def handle(event: str, cwd: str, path: str = None, cmd: str = None) -> dict:
         return _health_event(cwd)
     if event == "session_start":
         return _session_start_event(cwd)
+    if event in ("after_edit", "after_shell"):
+        return _pitfalls_event(event, cwd, path or "", cmd or "")
     r = empty_result(event, cwd)
     r["ok"] = False
     r["warnings"] = ["unknown event: %s" % event]
+    return r
+
+
+def _pitfalls_event(event: str, cwd: str, path: str, cmd: str) -> dict:
+    r = empty_result(event, cwd)
+    matches = pitfalls_mod.match(cwd, path=path, cmd=cmd)
+    r["matches"] = matches
+    if matches:
+        r["additional_context"] = pitfalls_mod.format_additional_context(
+            cwd, path, matches
+        )
     return r
 
 

@@ -38,5 +38,36 @@ class TestSessionStart(unittest.TestCase):
         self.assertIn("Workspace Map", r["additional_context"])
 
 
+class TestPitfalls(unittest.TestCase):
+    def test_after_edit_hit(self):
+        from lore_runtime.events import handle
+
+        r = handle(
+            "after_edit",
+            str(FIXTURE / "app"),
+            path=str(FIXTURE / "app" / "middleware" / "auth.ts"),
+        )
+        self.assertEqual(len(r["matches"]), 1)
+        self.assertEqual(r["matches"][0]["id"], "1")
+        self.assertIn("Auth middleware", r["additional_context"])
+
+    def test_after_edit_miss(self):
+        from lore_runtime.events import handle
+
+        r = handle(
+            "after_edit",
+            str(FIXTURE / "app"),
+            path=str(FIXTURE / "app" / "other.ts"),
+        )
+        self.assertEqual(r["matches"], [])
+        self.assertEqual(r["additional_context"], "")
+
+    def test_after_shell_hit(self):
+        from lore_runtime.events import handle
+
+        r = handle("after_shell", str(FIXTURE / "app"), cmd="npm run migrate auth")
+        self.assertEqual(r["matches"][0]["id"], "1")
+
+
 if __name__ == "__main__":
     unittest.main()
