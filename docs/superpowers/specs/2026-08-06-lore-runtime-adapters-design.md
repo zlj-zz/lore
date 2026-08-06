@@ -129,9 +129,11 @@ python3 -m lore_runtime.cli <event> [--cwd DIR] [--path FILE] [--cmd STR]
 **Rules**
 
 - Process exit code always `0` (do not block agents). Logical failure → `ok: false` and `warnings`.
+- `context_path` may be `null` when no CONTEXT.md is found; `LORE_LOADED` is `"0"` in that case.
 - `additional_context` may be `""`; adapters decide whether to omit platform fields.
 - `matches` is meaningful for `after_edit` / `after_shell`; empty array for `session_start` / `health` is fine.
 - stdout is **pure JSON**; debug only on stderr.
+- Adapters must invoke with `PYTHONPATH="<skill-root>/runtime"` (or use `bin/lore-event`, which sets it).
 
 ### Script compatibility
 
