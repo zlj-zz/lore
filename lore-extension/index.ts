@@ -193,12 +193,91 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.setStatus("lore", undefined);
     }
 
+    // Load pitfalls for trigger matching
+    loadPitfalls(cwd);
+
     // Health check
     if (!hasScript("on-session-start.sh")) return;
     cached = refreshStatus();
     if (cached.hasKB && cached.issues.length > 0) {
       ctx.ui.notify(`[lore] ⚠ ${cached.issues[0]}`, "warn");
     }
+  });
+
+  // ── L2: Triggers matching ──────────────────────────────────────────
+
+  // Cache: parsed pitfalls with triggers
+  interface PitfallEntry { id: number; title: string; difficulty: number; fileTriggers: string[]; apiTriggers: string[]; cmdTriggers: string[] }
+  let pitfalls: PitfallEntry[] = [];
+  let matchedPitfalls: number[] = []; // IDs matched this turn, injected before next agent run
+
+  function loadPitfalls(cwd: string): void {
+    pitfalls = [];
+    const files = [join(cwd, "..", ".pikb", "PITFALLS.md"), join(cwd, ".pi", "kb", "PITFALLS.md")];
+    for (const f of files) {
+      if (!existsSync(f)) continue;
+      const raw = readFileSync(f, "utf-8");
+      // Parse: ## N. Title ... Triggers: `file:x` | `api:y` | `cmd:z`
+      const sections = raw.split(/^## /gm).slice(1);
+      for (const sec of sections) {
+        const m = sec.match(/^(\d+)\.\s*(.+)/m);
+        if (!m) continue;
+        const id = parseInt(m[1]);
+        const title = m[2].trim();
+        const diffMatch = sec.match(/Difficulty:\s*⭐+/);
+        const difficulty = diffMatch ? diffMatch[0].match(/⭐/g)!.length : 1;
+        const trigMatch = sec.match(/Triggers:\s*(.+)/);
+        if (!trigMatch) continue;
+        const trigStr = trigMatch[1];
+        const fileTriggers: string[] = [];
+        const apiTriggers: string[] = [];
+        const cmdTriggers: string[] = [];
+        for (const t of trigStr.split(/\s*\|\s*/)) {
+          const cleaned = t.replace(/`/g, "");
+          if (cleaned.startsWith("file:")) fileTriggers.push(cleaned.slice(5));
+          else if (cleaned.startsWith("api:")) apiTriggers.push(cleaned.slice(4));
+          else if (cleaned.startsWith("cmd:")) cmdTriggers.push(cleaned.slice(4));
+        }
+        pitfalls.push({ id, title, difficulty, fileTriggers, apiTriggers, cmdTriggers });
+      }
+    }
+  }
+
+  function matchPitfall(path: string, cmd: string): void {
+    for (const p of pitfalls) {
+      if (path && p.fileTriggers.some((t) => path.includes(t))) matchedPitfalls.push(p.id);
+      if (cmd && p.cmdTriggers.some((t) => cmd.includes(t))) matchedPitfalls.push(p.id);
+    }
+    matchedPitfalls = [...new Set(matchedPitfalls)];
+  }
+
+  pi.on("tool_call", async (event, ctx) => {
+    if (pitfalls.length === 0) return;
+    const path = event.input?.path as string | undefined;
+    const cmd = event.toolName === "bash" ? (event.input?.command as string | undefined) : undefined;
+    matchPitfall(path ?? "", cmd ?? "");
+    if (matchedPitfalls.length > 0) {
+      const titles = matchedPitfalls.map((id) => pitfalls.find((p) => p.id === id)?.title).filter(Boolean);
+      ctx.ui.setStatus("lore", `📚 l ⚠`);
+      ctx.ui.notify(`[lore] ⚠ PITFALLS #${matchedPitfalls.join(",#")}: ${titles.join("; ")}`, "warn");
+    }
+  });
+
+  // Inject matched pitfalls into context
+  pi.on("before_agent_start", async () => {
+    if (matchedPitfalls.length === 0) return;
+    const warnings = matchedPitfalls.map((id) => {
+      const p = pitfalls.find((pp) => pp.id === id);
+      return p ? `⚠ PITFALLS #${p.id}: ${p.title} (Difficulty: ${"⭐".repeat(p.difficulty)})` : "";
+    }).filter(Boolean).join("\n");
+    matchedPitfalls = []; // reset after inject
+    return {
+      message: {
+        customType: "lore-pitfalls-warning",
+        content: `[lore] 以下 PITFALLS 与当前改动相关，请先阅读：\n\n${warnings}`,
+        display: false,
+      },
+    };
   });
 
   // ── Turn end: staleness check ──
