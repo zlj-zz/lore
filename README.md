@@ -96,13 +96,19 @@ After that, every session starts with context already loaded.
 | Agent | Install target |
 |-------|---------------|
 | pi | `AGENTS.md` rules + extension |
-| Claude Code | `AGENTS.md` rules + PostToolUse hook |
-| Cursor | `.cursorrules` |
+| Claude Code | `CLAUDE.md` rules + PostToolUse hook |
+| Cursor | `~/.cursor/hooks.json` (`sessionStart` + `postToolUse`) + hook scripts |
 
 ```bash
 ./install.sh --to pi,claude    # specific
 ./install.sh status --all       # see what's installed
 ```
+
+Cursor notes:
+- Session start injects CONTEXT.md (+ MAP summary) via `sessionStart`
+- Edits/shell commands matching PITFALLS triggers inject warnings via `postToolUse`
+- Legacy `~/.cursorrules` lore block is removed on install (hooks replace it)
+- Existing non-lore hooks in `~/.cursor/hooks.json` are preserved (merge)
 
 ---
 

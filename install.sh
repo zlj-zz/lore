@@ -24,11 +24,11 @@ EXIT_USAGE=2
 
 # --- agent definitions ---
 # "id|label|agents_md_path|extra_type"
-# extra_type: extension, hook, cursorrules, or none
+# extra_type: extension, hook, cursor_hooks, or none
 AGENT_DEFS=(
   "pi|pi coding agent|~/.pi/agent/AGENTS.md|extension"
   "claude|Claude Code|~/.claude/CLAUDE.md|hook"
-  "cursor|Cursor CLI||cursorrules"
+  "cursor|Cursor CLI||cursor_hooks"
 )
 
 # --- lore rules block (with sentinel markers for clean uninstall) ---
@@ -264,11 +264,119 @@ with open('$HOOKS_FILE', 'w') as f:
 " 2>/dev/null
 }
 
-# --- .cursorrules ---
+# --- Cursor hooks (~/.cursor/hooks.json) ---
+CURSOR_DIR="${HOME}/.cursor"
+CURSOR_HOOKS_JSON="${CURSOR_DIR}/hooks.json"
+CURSOR_HOOKS_DIR="${CURSOR_DIR}/hooks"
 CURSORRULES="${HOME}/.cursorrules"
+LORE_CURSOR_SESSION="lore-session-start.sh"
+LORE_CURSOR_POST="lore-post-tool-use.sh"
 
 _cursorrules_has_lore() {
   [[ -f "$CURSORRULES" ]] && grep -q "<!-- LORE-START -->" "$CURSORRULES"
+}
+
+_cursor_hook_scripts_linked() {
+  [[ -L "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_SESSION}" ]] || return 1
+  [[ -L "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_POST}" ]] || return 1
+  return 0
+}
+
+_cursor_hooks_json_has_lore() {
+  [[ -f "$CURSOR_HOOKS_JSON" ]] || return 1
+  python3 -c "
+import json
+with open('$CURSOR_HOOKS_JSON') as f:
+    cfg = json.load(f)
+hooks = cfg.get('hooks') or {}
+for event in hooks.values():
+    for h in event or []:
+        cmd = h.get('command', '')
+        if 'lore-session-start' in cmd or 'lore-post-tool-use' in cmd:
+            raise SystemExit(0)
+raise SystemExit(1)
+" 2>/dev/null
+}
+
+_cursor_link_hook_scripts() {
+  mkdir -p "$CURSOR_HOOKS_DIR"
+  local src_session="$ROOT/cursor-hooks/session-start.sh"
+  local src_post="$ROOT/cursor-hooks/post-tool-use.sh"
+  [[ -f "$src_session" && -f "$src_post" ]] || return 1
+  chmod +x "$src_session" "$src_post" "$ROOT/scripts/match-trigger.sh" 2>/dev/null || true
+  ln -sfn "$src_session" "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_SESSION}"
+  ln -sfn "$src_post" "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_POST}"
+  return 0
+}
+
+_cursor_unlink_hook_scripts() {
+  local f
+  for f in "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_SESSION}" "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_POST}"; do
+    if [[ -L "$f" ]]; then
+      [[ "$DRY_RUN" -eq 1 ]] || rm "$f"
+    fi
+  done
+}
+
+_cursor_hooks_add() {
+  mkdir -p "$CURSOR_DIR" "$CURSOR_HOOKS_DIR"
+  python3 -c "
+import json, os
+path = '$CURSOR_HOOKS_JSON'
+cfg = {'version': 1, 'hooks': {}}
+if os.path.isfile(path):
+    with open(path) as f:
+        cfg = json.load(f)
+hooks = cfg.setdefault('hooks', {})
+# drop previous lore entries
+for event, entries in list(hooks.items()):
+    hooks[event] = [h for h in (entries or [])
+                    if 'lore-session-start' not in h.get('command', '')
+                    and 'lore-post-tool-use' not in h.get('command', '')]
+    if not hooks[event]:
+        del hooks[event]
+hooks.setdefault('sessionStart', []).append({
+    'command': './hooks/$LORE_CURSOR_SESSION',
+    'timeout': 10,
+})
+hooks.setdefault('postToolUse', []).append({
+    'command': './hooks/$LORE_CURSOR_POST',
+    'timeout': 8,
+})
+cfg['version'] = cfg.get('version', 1) or 1
+with open(path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+    f.write('\n')
+"
+}
+
+_cursor_hooks_remove() {
+  [[ "$DRY_RUN" -eq 1 ]] && return 0
+  [[ -f "$CURSOR_HOOKS_JSON" ]] || return 1
+  python3 -c "
+import json
+path = '$CURSOR_HOOKS_JSON'
+with open(path) as f:
+    cfg = json.load(f)
+hooks = cfg.get('hooks') or {}
+changed = False
+for event, entries in list(hooks.items()):
+    new = [h for h in (entries or [])
+           if 'lore-session-start' not in h.get('command', '')
+           and 'lore-post-tool-use' not in h.get('command', '')]
+    if len(new) != len(entries or []):
+        changed = True
+    if new:
+        hooks[event] = new
+    else:
+        del hooks[event]
+if not hooks:
+    cfg.pop('hooks', None)
+if changed:
+    with open(path, 'w') as f:
+        json.dump(cfg, f, indent=2)
+        f.write('\n')
+"
 }
 
 # ============================================================
@@ -357,12 +465,29 @@ do_install() {
         _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}no settings.json${C_RESET}"
       fi
       ;;
-    cursorrules)
-      if _cursorrules_has_lore; then
-        _single_line "$(_icon skip)" ".cursorrules" "${C_DIM}already present${C_RESET}"
+    cursor_hooks)
+      if [[ ! -d "$ROOT/cursor-hooks" ]]; then
+        _single_line "$(_icon skip)" "cursor hooks" "${C_DIM}cursor-hooks/ missing${C_RESET}"
       else
-        printf '%s\n' "$LORE_RULES" >> "$CURSORRULES"
-        _single_line "$(_icon linked)" ".cursorrules" "${C_DIM}appended${C_RESET}"
+        if _cursor_link_hook_scripts; then
+          _single_line "$(_icon linked)" "hook scripts" "${C_DIM}${CURSOR_HOOKS_DIR}/lore-*.sh${C_RESET}"
+        else
+          _single_line "$(_icon conflict)" "hook scripts" "${C_YELLOW}link failed${C_RESET}"
+        fi
+        if _cursor_hooks_add; then
+          if _cursor_hooks_json_has_lore; then
+            _single_line "$(_icon linked)" "hooks.json" "${C_DIM}merged sessionStart + postToolUse${C_RESET}"
+          else
+            _single_line "$(_icon conflict)" "hooks.json" "${C_YELLOW}merge failed${C_RESET}"
+          fi
+        else
+          _single_line "$(_icon conflict)" "hooks.json" "${C_YELLOW}merge failed${C_RESET}"
+        fi
+      fi
+      # migrate off deprecated ~/.cursorrules
+      if _cursorrules_has_lore; then
+        _agents_remove "$CURSORRULES"
+        _single_line "$(_icon unlinked)" ".cursorrules" "${C_DIM}migrated off (hooks replace it)${C_RESET}"
       fi
       ;;
   esac
@@ -444,12 +569,22 @@ do_uninstall() {
         _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}not present${C_RESET}"
       fi
       ;;
-    cursorrules)
+    cursor_hooks)
+      if _cursor_hooks_json_has_lore; then
+        _cursor_hooks_remove
+        _single_line "$(_icon unlinked)" "hooks.json" "${C_DIM}lore entries removed${C_RESET}"
+      else
+        _single_line "$(_icon skip)" "hooks.json" "${C_DIM}not present${C_RESET}"
+      fi
+      if _cursor_hook_scripts_linked || [[ -L "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_SESSION}" || -L "${CURSOR_HOOKS_DIR}/${LORE_CURSOR_POST}" ]]; then
+        _cursor_unlink_hook_scripts
+        _single_line "$(_icon unlinked)" "hook scripts" "${C_DIM}removed${C_RESET}"
+      else
+        _single_line "$(_icon skip)" "hook scripts" "${C_DIM}not present${C_RESET}"
+      fi
       if _cursorrules_has_lore; then
         _agents_remove "$CURSORRULES"
-        _single_line "$(_icon unlinked)" ".cursorrules" "${C_DIM}removed${C_RESET}"
-      else
-        _single_line "$(_icon skip)" ".cursorrules" "${C_DIM}not present${C_RESET}"
+        _single_line "$(_icon unlinked)" ".cursorrules" "${C_DIM}removed leftover${C_RESET}"
       fi
       ;;
   esac
@@ -516,11 +651,19 @@ do_status() {
         _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}not in settings.json${C_RESET}"
       fi
       ;;
-    cursorrules)
-      if _cursorrules_has_lore; then
-        _single_line "$(_icon linked)" ".cursorrules" "${C_DIM}present${C_RESET}"
+    cursor_hooks)
+      if _cursor_hook_scripts_linked; then
+        _single_line "$(_icon linked)" "hook scripts" "${C_DIM}linked${C_RESET}"
       else
-        _single_line "$(_icon skip)" ".cursorrules" "${C_DIM}not present${C_RESET}"
+        _single_line "$(_icon skip)" "hook scripts" "${C_DIM}not linked${C_RESET}"
+      fi
+      if _cursor_hooks_json_has_lore; then
+        _single_line "$(_icon linked)" "hooks.json" "${C_DIM}sessionStart + postToolUse${C_RESET}"
+      else
+        _single_line "$(_icon skip)" "hooks.json" "${C_DIM}not present${C_RESET}"
+      fi
+      if _cursorrules_has_lore; then
+        _single_line "$(_icon conflict)" ".cursorrules" "${C_YELLOW}legacy leftover — re-run install to migrate${C_RESET}"
       fi
       ;;
   esac
@@ -551,7 +694,7 @@ ${C_BOLD}Flags:${C_RESET}
 ${C_BOLD}What gets installed per agent:${C_RESET}
   pi       AGENTS.md rules + pi extension symlink + skill symlink
   claude   AGENTS.md rules + PostToolUse hook + skill symlink (~/.claude/skills/)
-  cursor   .cursorrules + skill symlink
+  cursor   ~/.cursor/hooks.json (sessionStart + postToolUse) + hook script symlinks + skill symlink
 
 ${C_BOLD}Examples:${C_RESET}
   ./install.sh install

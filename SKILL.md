@@ -67,7 +67,7 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 1. 运行 `scripts/scan-workspace.sh [path]` 获取结构化工作区快照
 2. **排除 `.gitignore` 中 ignore 的目录**：`node_modules/`、`dist/`、`vendor/` 等不纳入仓库列表，不创建 CONTEXT.md
 3. 区分为仓库 / 文档 / 工具
-4. 读 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`
+4. 读 `AGENTS.md` / `CLAUDE.md` / `.cursor/rules` / Cursor hooks
 5. 读 `docs/` / `README.md`
 6. 从代码中识别分层（API → 聚合 → 领域 / 类似结构）
 7. **交叉验证**：对文档中提取的关键事实，抽样 grep 代码确认。若文档与代码不一致 → 以代码为准

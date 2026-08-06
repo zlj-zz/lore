@@ -91,6 +91,18 @@ workspace/
 
 ---
 
+## Agents
+
+| Agent | 安装内容 |
+|-------|---------|
+| pi | `AGENTS.md` + extension |
+| Claude Code | `CLAUDE.md` + PostToolUse hook |
+| Cursor | `~/.cursor/hooks.json`（`sessionStart` + `postToolUse`）+ hook 脚本 |
+
+Cursor：`sessionStart` 注入 CONTEXT/MAP；`postToolUse` 匹配 PITFALLS triggers；安装时会移除旧的 `~/.cursorrules` lore 块（与已有 hooks 合并，不覆盖）。
+
+---
+
 ## 设计原则
 
 - **自包含** — 事实内联，外部文档只是来源标注，文档删了 KB 不受影响
