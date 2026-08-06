@@ -10,7 +10,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -164,6 +164,32 @@ export default function (pi: ExtensionAPI) {
   // ── Session start ──
 
   pi.on("session_start", async (_event, ctx) => {
+    // Auto-inject knowledge base content
+    const cwd = ctx.cwd || process.cwd();
+    const contextPath = join(cwd, ".pi", "kb", "CONTEXT.md");
+
+    if (existsSync(contextPath)) {
+      let kbContent = readFileSync(contextPath, "utf-8").slice(0, 2048);
+
+      // If CONTEXT.md references workspace, inject MAP summary too
+      if (kbContent.includes("@workspace") || kbContent.includes(".pikb")) {
+        const mapPath = join(cwd, "..", ".pikb", "MAP.md");
+        if (existsSync(mapPath)) {
+          const mapLines = readFileSync(mapPath, "utf-8")
+            .split("\n")
+            .slice(0, 80)
+            .join("\n");
+          kbContent += `\n\n## Workspace Map (summary)\n${mapLines}`;
+        }
+      }
+
+      pi.sendMessage(
+        { customType: "lore-kb-context", content: `[Knowledge Base]\n\n${kbContent}`, display: false },
+        { triggerTurn: false },
+      );
+    }
+
+    // Health check
     if (!hasScript("on-session-start.sh")) return;
     cached = refreshStatus();
     if (cached.hasKB && cached.issues.length > 0) {
