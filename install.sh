@@ -27,7 +27,7 @@ EXIT_USAGE=2
 # extra_type: extension, hook, cursorrules, or none
 AGENT_DEFS=(
   "pi|pi coding agent|~/.pi/agent/AGENTS.md|extension"
-  "claude|Claude Code|~/.claude/AGENTS.md|hook"
+  "claude|Claude Code|~/.claude/CLAUDE.md|hook"
   "cursor|Cursor CLI||cursorrules"
 )
 
