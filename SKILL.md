@@ -64,10 +64,10 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 
 ### Step 1: 侦查
 
-1. `ls` 工作区根目录，列出所有子目录
-2. 区分哪些是仓库（有 `go.mod` / `package.json` / `.git`），哪些是文档/工具
-3. 读 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`（如果有）
-4. 读 `docs/` / `README.md`（如果有）
+1. 运行 `scripts/scan-workspace.sh [path]` 获取结构化工作区快照（repos、类型、agent 文件、docs）
+2. 区分为仓库 / 文档 / 工具（脚本已做，人工确认）
+3. 读 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`（脚本已标注哪些仓库有）
+4. 读 `docs/` / `README.md`（脚本已列出）
 5. 从代码中识别分层（API → 聚合 → 领域 / 类似结构）
 6. **交叉验证**：对文档中提取的关键事实（API 路径、数据结构、配置项），抽样 grep 代码确认。若文档与代码不一致 → 以代码为准，标注 `⚠️ 文档过时（doc v.s. code）`
 
