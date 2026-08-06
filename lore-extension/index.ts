@@ -1,8 +1,7 @@
 /**
  * lore — pi Extension
  *
- * Shows KB status on session start and provides /lore commands.
- *
+ * Persistent KB status widget + /lore commands + passive monitoring.
  * Reads from ~/.agents/skills/lore/scripts/ for all functionality.
  */
 
@@ -13,6 +12,21 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const SCRIPT_DIR = join(homedir(), ".agents", "skills", "lore", "scripts");
+const WIDGET_ID = "lore-status";
+const REFRESH_INTERVAL = 5; // turns between full refreshes
+
+// ── cached status ──
+interface KbStatus {
+  healthy: boolean;
+  repos: number;
+  age: number | null; // days
+  issues: string[];
+  hasKB: boolean;
+}
+let cached: KbStatus | null = null;
+let turnsSinceRefresh = 0;
+
+// ── helpers ──
 
 function hasScript(name: string): boolean {
   return existsSync(join(SCRIPT_DIR, name));
@@ -26,12 +40,8 @@ function runScript(name: string, args: string[] = []): { ok: boolean; output: st
       { encoding: "utf-8", timeout: 5000, cwd: process.cwd() },
     );
     return { ok: true, output: output.trim() };
-  } catch (e: any) {
-    const stderr = e.stderr?.toString() || e.stdout?.toString() || "";
-    const lines = stderr.split("\n").filter((l: string) => l.trim());
-    // extract the meaningful part — skip stack traces
-    const msg = lines.slice(0, 5).join("\n");
-    return { ok: false, output: msg || `${name} failed` };
+  } catch {
+    return { ok: false, output: "" };
   }
 }
 
@@ -39,22 +49,85 @@ function kbOk(output: string): boolean {
   return output.includes("all good") || output.includes("all fresh");
 }
 
+function parseJson(output: string): any | null {
+  try { return JSON.parse(output); } catch { return null; }
+}
+
+function refreshStatus(): KbStatus {
+  // fast path: try on-session-start.sh
+  const status = runScript("on-session-start.sh");
+  if (!status.ok) return { healthy: false, repos: 0, age: null, issues: [], hasKB: false };
+
+  // try JSON for structured data
+  const json = runScript("on-session-start.sh", ["--json"]);
+  const data = parseJson(json.output);
+
+  if (data && data.warnings !== undefined) {
+    return {
+      healthy: data.healthy,
+      repos: 0, // not in current JSON output
+      age: null,
+      issues: data.warnings?.map((w: any) => w.detail) || [],
+      hasKB: data.has_pikb,
+    };
+  }
+
+  // fallback: parse text output
+  const lines = status.output.split("\n").filter(l => l.trim());
+  const hasKB = !status.output.includes("not found");
+  const healthy = kbOk(status.output);
+  const warningLines = lines.filter(l => l.includes("⚠"));
+
+  return {
+    healthy,
+    repos: 0,
+    age: null,
+    issues: warningLines.map(l => l.replace(/^\s*⚠\s*/, "").trim()),
+    hasKB,
+  };
+}
+
+// ── widget ──
+
+function renderWidget(kb: KbStatus) {
+  return (_tui: any, theme: any) => {
+    const render = (): string[] => {
+      if (!kb.hasKB) {
+        return [theme.fg("dim", "  lore  —")];
+      }
+      if (kb.healthy) {
+        return [theme.fg("dim", "  lore  ") + theme.fg("success", "✓") + theme.fg("dim", "  healthy")];
+      }
+      const issue = kb.issues[0] || "needs attention";
+      const short = issue.length > 40 ? issue.slice(0, 37) + "..." : issue;
+      return [theme.fg("dim", "  lore  ") + theme.fg("warn", "⚠") + theme.fg("dim", `  ${short}`)];
+    };
+    return { render, invalidate: () => {} };
+  };
+}
+
+function updateWidget(ctx: { ui: { setWidget: (id: string, content: any, opts?: any) => void } }) {
+  if (!cached) cached = refreshStatus();
+  ctx.ui.setWidget(WIDGET_ID, renderWidget(cached), { placement: "belowEditor" });
+}
+
+// ── extension ──
+
 export default function (pi: ExtensionAPI) {
-  // ── /lore command ──
+  // ── /lore commands ──
 
   pi.registerCommand({
     name: "lore",
     description: "Check knowledge base status",
     async execute(_args, ctx) {
-      const status = runScript("on-session-start.sh");
-      if (!status.ok) {
-        ctx.ui.notify("[lore] extension not available — see ~/.agents/skills/lore", "warn");
-        return;
-      }
-      if (kbOk(status.output)) {
-        ctx.ui.notify("[lore] ✓ KB healthy — run /lore-detail for more", "info");
+      cached = refreshStatus();
+      updateWidget(ctx);
+      if (!cached.hasKB) {
+        ctx.ui.notify("[lore] No knowledge base — run /skill:lore 创建知识库", "info");
+      } else if (cached.healthy) {
+        ctx.ui.notify("[lore] ✓ KB healthy", "info");
       } else {
-        ctx.ui.notify("[lore] ⚠ KB needs attention — run /lore-detail", "warn");
+        ctx.ui.notify(`[lore] ⚠ ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
       }
     },
   });
@@ -104,82 +177,64 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // ── Session start check ──
+  // ── Session start ──
 
   pi.on("session_start", async (_event, ctx) => {
     if (!hasScript("on-session-start.sh")) return;
-
-    const status = runScript("on-session-start.sh");
-
-    if (!status.ok) {
-      // non-zero exit → KB not initialized or has issues
-      const lines = status.output.split("\n").filter((l) => l.trim());
-      const warningLine = lines.find((l) => l.includes("⚠"));
-      if (warningLine) {
-        ctx.ui.notify(`[lore] ${warningLine.replace(/^\s*⚠\s*/, "").trim()}`, "warn");
-      }
+    cached = refreshStatus();
+    if (ctx.ui && typeof ctx.ui.setWidget === "function") {
+      updateWidget(ctx);
     }
-    // if KB is healthy, don't interrupt — just be quiet
+    if (cached.hasKB && cached.issues.length > 0) {
+      ctx.ui.notify(`[lore] ⚠ ${cached.issues[0]}`, "warn");
+    }
   });
 
-  // ── Passive hooks ──
-
-  let turnCount = 0;
-  const STALENESS_INTERVAL = 5; // check every 5 turns
+  // ── Turn end: refresh widget + staleness check ──
 
   pi.on("turn_end", async (_event, ctx) => {
-    turnCount++;
-    if (turnCount % STALENESS_INTERVAL !== 0) return;
-    if (!hasScript("check-staleness.sh")) return;
+    turnsSinceRefresh++;
 
-    // quick staleness check — only notify if there are issues
-    try {
-      const result = runScript("check-staleness.sh", ["--json"]);
-      if (!result.ok) return;
-      const data = JSON.parse(result.output);
-      if (data.stale) {
-        const issues = data.issues || [];
-        const warnings = issues.filter((i: any) => i.severity === "warning");
-        if (warnings.length > 0) {
-          ctx.ui.notify(
-            `[lore] ${warnings.length} KB issue(s) — run /lore-detail`,
-            "warn",
-          );
-        }
+    if (turnsSinceRefresh >= REFRESH_INTERVAL) {
+      turnsSinceRefresh = 0;
+      cached = refreshStatus();
+      if (ctx.ui && typeof ctx.ui.setWidget === "function") {
+        updateWidget(ctx);
       }
-    } catch {
-      // silent — script failures shouldn't interrupt the user
+
+      // notify on new issues
+      if (cached.hasKB && cached.issues.length > 0) {
+        ctx.ui.notify(`[lore] ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
+      }
     }
   });
 
+  // ── Tool end: detect new repo ──
+
   pi.on("tool_execution_end", async (event, ctx) => {
-    // detect potential new repo creation
     const toolName = event.tool?.name || "";
+    const cmd = String(event.args?.command || "");
     const isCloneOrInit =
       toolName === "bash" &&
-      event.args?.command &&
-      /(git\s+clone|git\s+init|mkdir\s+-p.*\/)|(create\s+directory)/i.test(
-        String(event.args.command),
-      );
+      /(git\s+clone|git\s+init|mkdir\s+-p.*\/)|create\s+directory/i.test(cmd);
 
-    if (!isCloneOrInit) return;
-    if (!hasScript("scan-workspace.sh")) return;
+    if (!isCloneOrInit || !hasScript("scan-workspace.sh")) return;
 
-    // debounce: wait 2s then check if a new repo appeared
     setTimeout(() => {
-      try {
-        const scan = runScript("scan-workspace.sh");
-        if (!scan.ok) return;
-        const data = JSON.parse(scan.output);
-        const uncovered = data.repos?.filter((r: any) => !r.has_context_md) || [];
-        if (uncovered.length > 0) {
-          ctx.ui.notify(
-            `[lore] ${uncovered.length} repo(s) without CONTEXT.md — consider /skill:lore 创建知识库`,
-            "info",
-          );
+      const scan = runScript("scan-workspace.sh");
+      if (!scan.ok) return;
+      const data = parseJson(scan.output);
+      const uncovered = data?.repos?.filter((r: any) => !r.has_context_md) || [];
+      if (uncovered.length > 0) {
+        ctx.ui.notify(
+          `[lore] ${uncovered.length} new repo(s) without CONTEXT.md — /skill:lore 创建知识库`,
+          "info",
+        );
+        // refresh widget after new repo detection
+        cached = refreshStatus();
+        if (ctx.ui && typeof ctx.ui.setWidget === "function") {
+          updateWidget(ctx);
         }
-      } catch {
-        // silent
       }
     }, 2000);
   });
