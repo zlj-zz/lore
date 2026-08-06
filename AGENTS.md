@@ -2,7 +2,7 @@
 
 On session start:
 1. If `~/.agents/skills/lore/scripts/on-session-start.sh` exists, run it and note any warnings
-2. Read `.pi/kb/CONTEXT.md`
+2. Read `.pi/kb/CONTEXT.md` and output `📚 lore loaded`
 3. If it references `@workspace`, read `../.pikb/MAP.md` (first 80 lines)
 
 During work:
