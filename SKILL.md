@@ -1,6 +1,13 @@
 ---
 name: lore
-description: 项目知识库——大项目/多仓库场景下结构化积累、渐进式加载。触发：项目文档、架构、规范、踩坑、多仓库、知识库、项目记忆、onboarding
+description: >-
+  Structured, progressively-loaded project knowledge base for multi-repo
+  workspaces. Before you read more than 3 files blindly in an unfamiliar
+  project — stop and use this skill first. Use when entering a new codebase,
+  onboarding, exploring project structure, or when the user mentions 项目知识库,
+  创建知识库, 初始化知识库, 多仓库, 项目记忆, 帮我了解这个项目, 这个项目怎么跑,
+  explore this codebase, setup project memory. Also triggers when .pikb/ is
+  missing in a complex workspace.
 ---
 
 # lore — 项目知识库
@@ -90,13 +97,13 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 
 按模板生成所有文件：
 
-| 顺序 | 文件 | 来源 |
-|------|------|------|
-| 1 | `.pikb/MAP.md` | 侦查 + ask user 回答 |
-| 2 | `.pikb/CONVENTIONS.md` | 代码扫描 + AGENTS.md + ask user |
-| 3 | `.pikb/PITFALLS.md` | 代码中的 TODO/FIXME/HACK + ask user "有什么已知坑？" |
-| 4 | `.pikb/README.md` | 索引 |
-| 5 | **每个仓库** `.pi/kb/CONTEXT.md` | `ls` + `head` 入口文件 |
+| 顺序 | 文件 | 来源 | 模板 |
+|------|------|------|------|
+| 1 | `.pikb/MAP.md` | 侦查 + ask user 回答 | [`templates/MAP.md`](templates/MAP.md) |
+| 2 | `.pikb/CONVENTIONS.md` | 代码扫描 + AGENTS.md + ask user | [`templates/CONVENTIONS.md`](templates/CONVENTIONS.md) |
+| 3 | `.pikb/PITFALLS.md` | 代码中的 TODO/FIXME/HACK + ask user "有什么已知坑？" | [`templates/PITFALLS.md`](templates/PITFALLS.md) |
+| 4 | `.pikb/README.md` | 索引 | 自行生成 |
+| 5 | **每个仓库** `.pi/kb/CONTEXT.md` | `ls` + `head` 入口文件 | [`templates/CONTEXT.md`](templates/CONTEXT.md) |
 
 ⚠️ **必须为工作区下每一个仓库创建 CONTEXT.md**。跳过就是知识盲区。
 
