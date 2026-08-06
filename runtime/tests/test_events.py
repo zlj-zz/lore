@@ -19,6 +19,12 @@ class TestHealth(unittest.TestCase):
         self.assertEqual(r["status"], "missing")
         self.assertTrue(any("pikb" in w.lower() or "missing" in w.lower() for w in r["warnings"]) or r["status"] == "missing")
 
+    def test_health_fixture_not_missing(self):
+        from lore_runtime.events import handle
+        r = handle("health", str(FIXTURE / "app"))
+        self.assertIn(r["status"], ("healthy", "degraded"))
+        self.assertIsNotNone(r["context_path"])
+
 
 if __name__ == "__main__":
     unittest.main()
