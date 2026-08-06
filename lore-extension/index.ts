@@ -1,8 +1,11 @@
 /**
  * lore — pi Extension
  *
- * Persistent KB status widget + /lore commands + passive monitoring.
+ * KB status checks + /lore commands + passive monitoring.
  * Reads from ~/.agents/skills/lore/scripts/ for all functionality.
+ *
+ * NOTE: Persistent setWidget disabled — multiple belowEditor widgets
+ * may trigger pi editor autocomplete crash. Re-enable when resolved.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -13,20 +16,17 @@ import { join } from "node:path";
 
 const SCRIPT_DIR = join(homedir(), ".agents", "skills", "lore", "scripts");
 const WIDGET_ID = "lore-status";
-const REFRESH_INTERVAL = 5; // turns between full refreshes
+const REFRESH_INTERVAL = 5;
 
-// ── cached status ──
 interface KbStatus {
   healthy: boolean;
   repos: number;
-  age: number | null; // days
+  age: number | null;
   issues: string[];
   hasKB: boolean;
 }
 let cached: KbStatus | null = null;
 let turnsSinceRefresh = 0;
-
-// ── helpers ──
 
 function hasScript(name: string): boolean {
   return existsSync(join(SCRIPT_DIR, name));
@@ -54,25 +54,22 @@ function parseJson(output: string): any | null {
 }
 
 function refreshStatus(): KbStatus {
-  // fast path: try on-session-start.sh
   const status = runScript("on-session-start.sh");
   if (!status.ok) return { healthy: false, repos: 0, age: null, issues: [], hasKB: false };
 
-  // try JSON for structured data
   const json = runScript("on-session-start.sh", ["--json"]);
   const data = parseJson(json.output);
 
   if (data && data.warnings !== undefined) {
     return {
       healthy: data.healthy,
-      repos: 0, // not in current JSON output
+      repos: 0,
       age: null,
       issues: data.warnings?.map((w: any) => w.detail) || [],
       hasKB: data.has_pikb,
     };
   }
 
-  // fallback: parse text output
   const lines = status.output.split("\n").filter(l => l.trim());
   const hasKB = !status.output.includes("not found");
   const healthy = kbOk(status.output);
@@ -87,9 +84,10 @@ function refreshStatus(): KbStatus {
   };
 }
 
-// ── widget ──
+// ── Widget (disabled — pi editor autocomplete conflict with multiple belowEditor widgets) ──
+// Re-enable when pi-tui resolves: call _updateWidget(ctx) on session_start + turn_end
 
-function renderLine(kb: KbStatus): string {
+function _renderLine(kb: KbStatus): string {
   if (!kb.hasKB) return "  lore  —";
   if (kb.healthy) return "  lore  ✓  healthy";
   const issue = kb.issues[0] || "needs attention";
@@ -97,10 +95,9 @@ function renderLine(kb: KbStatus): string {
   return `  lore  ⚠  ${short}`;
 }
 
-function updateWidget(ctx: { ui: { setWidget: (id: string, content: any, opts?: any) => void } }) {
+function _updateWidget(ctx: { ui: { setWidget: (id: string, content: any, opts?: any) => void } }) {
   if (!cached) cached = refreshStatus();
-  const line = renderLine(cached);
-  ctx.ui.setWidget(WIDGET_ID, [line], { placement: "belowEditor" });
+  ctx.ui.setWidget(WIDGET_ID, [_renderLine(cached)], { placement: "belowEditor" });
 }
 
 // ── extension ──
@@ -113,7 +110,6 @@ export default function (pi: ExtensionAPI) {
     description: "Check knowledge base status",
     async execute(_args, ctx) {
       cached = refreshStatus();
-      updateWidget(ctx);
       if (!cached.hasKB) {
         ctx.ui.notify("[lore] No knowledge base — run /skill:lore 创建知识库", "info");
       } else if (cached.healthy) {
@@ -174,30 +170,21 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (!hasScript("on-session-start.sh")) return;
     cached = refreshStatus();
-    if (ctx.ui && typeof ctx.ui.setWidget === "function") {
-      updateWidget(ctx);
-    }
     if (cached.hasKB && cached.issues.length > 0) {
       ctx.ui.notify(`[lore] ⚠ ${cached.issues[0]}`, "warn");
     }
   });
 
-  // ── Turn end: refresh widget + staleness check ──
+  // ── Turn end: staleness check ──
 
   pi.on("turn_end", async (_event, ctx) => {
     turnsSinceRefresh++;
+    if (turnsSinceRefresh < REFRESH_INTERVAL) return;
+    turnsSinceRefresh = 0;
+    cached = refreshStatus();
 
-    if (turnsSinceRefresh >= REFRESH_INTERVAL) {
-      turnsSinceRefresh = 0;
-      cached = refreshStatus();
-      if (ctx.ui && typeof ctx.ui.setWidget === "function") {
-        updateWidget(ctx);
-      }
-
-      // notify on new issues
-      if (cached.hasKB && cached.issues.length > 0) {
-        ctx.ui.notify(`[lore] ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
-      }
+    if (cached.hasKB && cached.issues.length > 0) {
+      ctx.ui.notify(`[lore] ${cached.issues.length} issue(s) — run /lore-detail`, "warn");
     }
   });
 
@@ -222,11 +209,6 @@ export default function (pi: ExtensionAPI) {
           `[lore] ${uncovered.length} new repo(s) without CONTEXT.md — /skill:lore 创建知识库`,
           "info",
         );
-        // refresh widget after new repo detection
-        cached = refreshStatus();
-        if (ctx.ui && typeof ctx.ui.setWidget === "function") {
-          updateWidget(ctx);
-        }
       }
     }, 2000);
   });
