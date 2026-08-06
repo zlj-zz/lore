@@ -105,10 +105,9 @@ function _updateWidget(ctx: { ui: { setWidget: (id: string, content: any, opts?:
 export default function (pi: ExtensionAPI) {
   // ── /lore commands ──
 
-  pi.registerCommand({
-    name: "lore",
+  pi.registerCommand("lore", {
     description: "Check knowledge base status",
-    async execute(_args, ctx) {
+    async handler(_args, ctx) {
       cached = refreshStatus();
       if (!cached.hasKB) {
         ctx.ui.notify("[lore] No knowledge base — run /skill:lore 创建知识库", "info");
@@ -120,10 +119,9 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand({
-    name: "lore-detail",
+  pi.registerCommand("lore-detail", {
     description: "Show full knowledge base status",
-    async execute(_args, ctx) {
+    async handler(_args, ctx) {
       const status = runScript("on-session-start.sh");
       if (status.ok) {
         ctx.ui.notify(status.output, kbOk(status.output) ? "info" : "warn");
@@ -133,10 +131,9 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand({
-    name: "lore-audit",
+  pi.registerCommand("lore-audit", {
     description: "Audit knowledge base quality",
-    async execute(_args, ctx) {
+    async handler(_args, ctx) {
       ctx.ui.notify("[lore] Running audit...", "info");
       const result = runScript("audit-kb.sh");
       if (result.ok) {
@@ -147,11 +144,10 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand({
-    name: "lore-search",
+  pi.registerCommand("lore-search", {
     description: "Search knowledge base. Usage: /lore-search <keyword>",
-    async execute(args, ctx) {
-      const keyword = args.join(" ").trim();
+    async handler(args, ctx) {
+      const keyword = args.trim();
       if (!keyword) {
         ctx.ui.notify("[lore] Usage: /lore-search <keyword>", "info");
         return;
@@ -191,8 +187,8 @@ export default function (pi: ExtensionAPI) {
   // ── Tool end: detect new repo ──
 
   pi.on("tool_execution_end", async (event, ctx) => {
-    const toolName = event.tool?.name || "";
-    const cmd = String(event.args?.command || "");
+    const toolName = event.toolName;
+    const cmd = String(event.input?.command || "");
     const isCloneOrInit =
       toolName === "bash" &&
       /(git\s+clone|git\s+init|mkdir\s+-p.*\/)|create\s+directory/i.test(cmd);
