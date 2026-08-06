@@ -89,26 +89,18 @@ function refreshStatus(): KbStatus {
 
 // ── widget ──
 
-function renderWidget(kb: KbStatus) {
-  return (_tui: any, theme: any) => {
-    const render = (): string[] => {
-      if (!kb.hasKB) {
-        return [theme.fg("dim", "  lore  —")];
-      }
-      if (kb.healthy) {
-        return [theme.fg("dim", "  lore  ") + theme.fg("success", "✓") + theme.fg("dim", "  healthy")];
-      }
-      const issue = kb.issues[0] || "needs attention";
-      const short = issue.length > 40 ? issue.slice(0, 37) + "..." : issue;
-      return [theme.fg("dim", "  lore  ") + theme.fg("warn", "⚠") + theme.fg("dim", `  ${short}`)];
-    };
-    return { render, invalidate: () => {} };
-  };
+function renderLine(kb: KbStatus): string {
+  if (!kb.hasKB) return "  lore  —";
+  if (kb.healthy) return "  lore  ✓  healthy";
+  const issue = kb.issues[0] || "needs attention";
+  const short = issue.length > 40 ? issue.slice(0, 37) + "..." : issue;
+  return `  lore  ⚠  ${short}`;
 }
 
 function updateWidget(ctx: { ui: { setWidget: (id: string, content: any, opts?: any) => void } }) {
   if (!cached) cached = refreshStatus();
-  ctx.ui.setWidget(WIDGET_ID, renderWidget(cached), { placement: "belowEditor" });
+  const line = renderLine(cached);
+  ctx.ui.setWidget(WIDGET_ID, [line], { placement: "belowEditor" });
 }
 
 // ── extension ──
