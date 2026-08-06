@@ -30,9 +30,13 @@ $ ./scripts/on-session-start.sh
 ## Install
 
 ```bash
+# pi (recommended)
+pi install git:github.com/zlj-zz/lore
+
+# all agents (pi + Claude + Cursor)
 git clone https://github.com/zlj-zz/lore.git ~/projects/lore
 cd ~/projects/lore
-./install.sh              # pi + Claude + Cursor
+./install.sh
 ```
 
 ## Usage

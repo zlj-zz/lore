@@ -30,9 +30,13 @@ $ ./scripts/on-session-start.sh
 ## 安装
 
 ```bash
+# pi（推荐）
+pi install git:github.com/zlj-zz/lore
+
+# 全 agent（pi + Claude + Cursor）
 git clone https://github.com/zlj-zz/lore.git ~/projects/lore
 cd ~/projects/lore
-./install.sh              # pi + Claude + Cursor 一键安装
+./install.sh
 ```
 
 ## 使用

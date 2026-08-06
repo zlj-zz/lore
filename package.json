@@ -1,0 +1,12 @@
+{
+  "name": "lore",
+  "version": "1.0.0",
+  "description": "Structured, self-updating knowledge base for multi-repo projects",
+  "keywords": ["pi-package", "knowledge-base", "multi-repo", "lore"],
+  "author": "zev <zlj19971222@outlook.com>",
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./lore-extension"],
+    "skills": ["./"]
+  }
+}
