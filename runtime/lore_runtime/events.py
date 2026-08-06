@@ -3,15 +3,34 @@ from pathlib import Path
 from lore_runtime.types import empty_result, STATUS_HEALTHY, STATUS_DEGRADED, STATUS_MISSING
 from lore_runtime import health as health_mod
 from lore_runtime import discover
+from lore_runtime import context as context_mod
 
 
 def handle(event: str, cwd: str, path: str = None, cmd: str = None) -> dict:
     cwd = str(Path(cwd).resolve())
     if event == "health":
         return _health_event(cwd)
+    if event == "session_start":
+        return _session_start_event(cwd)
     r = empty_result(event, cwd)
     r["ok"] = False
     r["warnings"] = ["unknown event: %s" % event]
+    return r
+
+
+def _session_start_event(cwd: str) -> dict:
+    r = empty_result("session_start", cwd)
+    h = health_mod.check(cwd)
+    text, ctx_path, ctx_warnings = context_mod.build_session_additional_context(cwd)
+    r["additional_context"] = text
+    r["context_path"] = ctx_path
+    r["status"] = h["status"]
+    r["warnings"] = h["warnings"] + ctx_warnings
+    r["env"] = {
+        "LORE_LOADED": "1" if ctx_path else "0",
+        "LORE_CONTEXT": ctx_path or "",
+        "LORE_CWD": cwd,
+    }
     return r
 
 

@@ -26,5 +26,17 @@ class TestHealth(unittest.TestCase):
         self.assertIsNotNone(r["context_path"])
 
 
+class TestSessionStart(unittest.TestCase):
+    def test_session_start_includes_context_and_marker(self):
+        from lore_runtime.events import handle
+
+        r = handle("session_start", str(FIXTURE / "app"))
+        self.assertTrue(r["ok"])
+        self.assertIn("📚 lore loaded", r["additional_context"])
+        self.assertIn("mini-app", r["additional_context"])
+        self.assertEqual(r["env"]["LORE_LOADED"], "1")
+        self.assertIn("Workspace Map", r["additional_context"])
+
+
 if __name__ == "__main__":
     unittest.main()
