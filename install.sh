@@ -37,8 +37,9 @@ LORE_RULES='
 ## Knowledge Base (lore)
 
 On session start:
-1. Read `.pi/kb/CONTEXT.md`
-2. If it references @workspace, read `../.pikb/MAP.md` (first 80 lines)
+1. If `~/.agents/skills/lore/scripts/on-session-start.sh` exists, run it and note any warnings
+2. Read `.pi/kb/CONTEXT.md`
+3. If it references @workspace, read `../.pikb/MAP.md` (first 80 lines)
 
 During work:
 - Writing code → check `.pikb/CONVENTIONS.md`
@@ -47,7 +48,9 @@ During work:
 - New repo discovered → create `.pi/kb/CONTEXT.md`
 - Significant change → ask: "knowledge base 需要更新吗?"
 
-If `.pikb/` doesn'\''t exist and project is complex:
+**Search KB:** Run `~/.agents/skills/lore/scripts/quick-ref.sh <keyword>` to find relevant context.
+
+If `.pikb/` doesn'\''t exist and project looks complex (multi-repo / >5 rounds):
   → `/skill:lore 创建知识库` or ask agent to run lore
 <!-- LORE-END -->
 '
