@@ -240,6 +240,15 @@ scripts/audit-kb.sh          # KB 质量审计
 ./scripts/on-session-start.sh || echo "[lore] run /skill:lore 创建知识库 to initialize"
 ```
 
+**pi extension** 额外提供 slash 命令：
+
+| 命令 | 作用 |
+|------|------|
+| `/lore` | KB 健康概览 |
+| `/lore-detail` | 完整 KB 状态 |
+| `/lore-audit` | 运行质量审计 |
+| `/lore-search <keyword>` | 搜索 KB |
+
 ## 跨 Agent
 
 `./install.sh` 自动配置加载规则。也可手动添加——见 [AGENTS.md](./AGENTS.md)。
