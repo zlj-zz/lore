@@ -296,6 +296,28 @@ export default function (pi: ExtensionAPI) {
   // ── Tool end: detect new repo ──
 
   pi.on("tool_execution_end", async (event, ctx) => {
+    // L3: Error logging
+    if (event.isError) {
+      const cwd = ctx.cwd || process.cwd();
+      const logDir = join(cwd, ".pi", "kb");
+      const logFile = join(logDir, ".error-log.jsonl");
+      try {
+        if (existsSync(logDir)) {
+          const entry = JSON.stringify({
+            time: new Date().toISOString(),
+            tool: event.toolName,
+            error: String((event as any).result?.content ?? "unknown").slice(0, 200),
+          });
+          const { appendFileSync } = await import("node:fs");
+          appendFileSync(logFile, entry + "\n");
+          const count = existsSync(logFile) ? readFileSync(logFile, "utf-8").split("\n").filter(Boolean).length : 0;
+          if (count > 0 && count % 5 === 0) {
+            ctx.ui.notify(`[lore] ${count} errors logged — any worth recording as PITFALLS?`, "info");
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
     const toolName = event.toolName;
     const cmd = String(event.input?.command || "");
     const isCloneOrInit =
