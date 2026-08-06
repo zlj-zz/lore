@@ -105,10 +105,12 @@ After that, every session starts with context already loaded.
 ```
 
 Cursor notes:
-- Session start injects CONTEXT.md (+ MAP summary) via `sessionStart`
+- Session start injects CONTEXT.md (+ MAP summary) via `sessionStart` (also sets `LORE_*` env)
 - Edits/shell commands matching PITFALLS triggers inject warnings via `postToolUse`
+- **Visible signal:** project `.cursor/rules/lore.mdc` (`alwaysApply`) asks the agent to print `📚 lore loaded` — Cursor hooks are silent and `additional_context` can be dropped (known Cursor bug)
 - Legacy `~/.cursorrules` lore block is removed on install (hooks replace it)
 - Existing non-lore hooks in `~/.cursor/hooks.json` are preserved (merge)
+- Idle CLI ("Waiting for session data...") has not started a session yet — send a message to trigger lore
 
 ---
 

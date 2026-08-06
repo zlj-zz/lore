@@ -106,6 +106,7 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 | 3 | `.pikb/PITFALLS.md` | 代码中的 TODO/FIXME/HACK + ask user "有什么已知坑？" | [`templates/PITFALLS.md`](templates/PITFALLS.md) |
 | 4 | `.pikb/README.md` | 索引 | 自行生成 |
 | 5 | **每个仓库** `.pi/kb/CONTEXT.md` | `ls` + `head` 入口文件 | [`templates/CONTEXT.md`](templates/CONTEXT.md) |
+| 6 | Cursor 项目（若存在 `.cursor/`） | 复制 alwaysApply 规则 | [`templates/cursor-lore.mdc`](templates/cursor-lore.mdc) → `.cursor/rules/lore.mdc` |
 
 ⚠️ **必须为工作区下每一个仓库创建 CONTEXT.md**。跳过就是知识盲区。
 

@@ -1,0 +1,23 @@
+---
+description: lore knowledge base loading rules for Cursor Agent
+alwaysApply: true
+---
+
+## Knowledge Base (lore)
+
+**First reply in a new session:** after reading CONTEXT (below), include the line `📚 lore loaded` so the human can see lore is active. Cursor hooks may inject CONTEXT silently; do not skip the visible signal.
+
+On session start:
+1. Read `.pi/kb/CONTEXT.md` if present (or use injected CONTEXT if already in context)
+2. If it references `@workspace` / `.pikb`, read workspace `.pikb/MAP.md` (first ~80 lines)
+3. Run `~/.agents/skills/lore/scripts/on-session-start.sh` when unsure about KB health
+
+During work:
+- Writing code → check `.pikb/CONVENTIONS.md`
+- Multi-module changes → check `.pikb/MAP.md`
+- Error / risky edit → check `.pikb/PITFALLS.md` (and `.pi/kb/PITFALLS.md`)
+- New repo → create `.pi/kb/CONTEXT.md`
+- Significant change → ask: "knowledge base 需要更新吗?"
+
+Search: `~/.agents/skills/lore/scripts/quick-ref.sh <keyword>`
+Missing KB in a complex workspace → `/skill:lore 创建知识库`

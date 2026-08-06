@@ -94,5 +94,16 @@ if health_script.is_file():
     except Exception:
         pass
 
-print(json.dumps({"additional_context": "\n\n".join(parts)}, ensure_ascii=False))
+# Cursor has a known race where sessionStart additional_context is dropped.
+# env is a more reliable channel; rules/AGENTS.md remain the durable fallback.
+ctx_path = str(ctx) if ctx else ""
+out = {
+    "additional_context": "\n\n".join(parts),
+    "env": {
+        "LORE_LOADED": "1" if ctx else "0",
+        "LORE_CONTEXT": ctx_path,
+        "LORE_CWD": cwd,
+    },
+}
+print(json.dumps(out, ensure_ascii=False))
 PY

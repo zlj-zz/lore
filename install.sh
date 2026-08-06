@@ -335,12 +335,14 @@ for event, entries in list(hooks.items()):
                     and 'lore-post-tool-use' not in h.get('command', '')]
     if not hooks[event]:
         del hooks[event]
+# Absolute paths: Cursor CLI may not resolve ./hooks relative to ~/.cursor
+# the same way the IDE does (match existing crg-* style).
 hooks.setdefault('sessionStart', []).append({
-    'command': './hooks/$LORE_CURSOR_SESSION',
+    'command': '$CURSOR_HOOKS_DIR/$LORE_CURSOR_SESSION',
     'timeout': 10,
 })
 hooks.setdefault('postToolUse', []).append({
-    'command': './hooks/$LORE_CURSOR_POST',
+    'command': '$CURSOR_HOOKS_DIR/$LORE_CURSOR_POST',
     'timeout': 8,
 })
 cfg['version'] = cfg.get('version', 1) or 1
