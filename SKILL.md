@@ -266,6 +266,10 @@ scripts/audit-kb.sh          # KB 质量审计
 
 `./install.sh` 自动配置加载规则。也可手动添加——见 [AGENTS.md](./AGENTS.md)。
 
+### 共享运行时（`lore_runtime`）
+
+跨 agent 的 KB 事件（会话启动、PITFALLS 匹配、健康检查）由 `runtime/lore_runtime` 统一实现，CLI 入口为 `bin/lore-event`（或 `PYTHONPATH=runtime python3 -m lore_runtime`）。`scripts/on-session-start.sh` 与 `scripts/match-trigger.sh` 是对同一 runtime 的 shell 门面；Cursor / Claude / pi 各自只负责把 hook 输入映射到 CLI 参数。对照表：[docs/adapters.md](docs/adapters.md)。
+
 ## 模板
 
 Templates 在 `templates/` 目录下，初始化时复制使用。

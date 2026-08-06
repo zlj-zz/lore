@@ -93,11 +93,19 @@ workspace/
 
 ## Agents
 
-| Agent | 安装内容 |
-|-------|---------|
-| pi | `AGENTS.md` + extension |
-| Claude Code | `CLAUDE.md` + PostToolUse hook |
-| Cursor | `~/.cursor/hooks.json`（`sessionStart` + `postToolUse`）+ hook 脚本 |
+KB 启动、PITFALLS 匹配、健康检查共用 Python 运行时（`runtime/lore_runtime`），通过 **`bin/lore-event`** 调用。各 agent 的 hook / extension 只是薄适配层，领域逻辑集中在 runtime。完整对照表见 [docs/adapters.md](docs/adapters.md)。
+
+| Agent | 安装内容 | 运行时适配 |
+|-------|---------|-----------|
+| pi | `AGENTS.md` + extension | `lore-extension/` 调用 `bin/lore-event` |
+| Claude Code | `CLAUDE.md` + PostToolUse hook | `install.sh` 写入节流 `lore-event health` |
+| Cursor | `~/.cursor/hooks.json`（`sessionStart` + `postToolUse`）| `cursor-hooks/` → `adapters/common.sh` → `lore-event` |
+
+```bash
+./install.sh --to pi,claude
+./install.sh status --all
+bin/lore-event session_start --cwd .   # 本地 smoke test
+```
 
 Cursor：`sessionStart` 注入 CONTEXT/MAP；`postToolUse` 匹配 PITFALLS triggers；安装时会移除旧的 `~/.cursorrules` lore 块（与已有 hooks 合并，不覆盖）。
 
