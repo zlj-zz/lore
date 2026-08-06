@@ -160,11 +160,11 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 - Symptom: 现象
 - Root Cause: 根因
 - Solution: 正确做法
-- Triggers: `file_pattern` | `api_path` | `command:regex`
+- Triggers: `file:path_fragment` | `api:/path` | `cmd:pattern`
 - Related: 参见 [CONVENTIONS §X](./CONVENTIONS.md#...)
 ```
 
-`Triggers` 是可选字段，用于 Extension 自动匹配（如匹配到"修改 dealer_device_list.go"自动警告 PITFALLS #3）。至少填一个：文件路径片段、API 路径、bash 命令模式。
+`Triggers` 用于自动匹配警告。格式：前缀 `file:`（edit/write 匹配 path）、`api:`（REST 路径匹配）、`cmd:`（bash 命令匹配），用 ` | ` 分隔。至少填一个。
 
 ### MAP.md 仓库条目格式
 

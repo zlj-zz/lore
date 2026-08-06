@@ -8,5 +8,5 @@
 - Symptom: what you see
 - Root Cause: why it happens
 - Solution: correct approach
-- Triggers: `file_pattern` | `api_path` | `tool:regex`
+- Triggers: `file:path_fragment` | `api:/path` | `cmd:pattern`
 - Related: see [CONVENTIONS §X](./CONVENTIONS.md#...)
