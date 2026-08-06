@@ -64,12 +64,13 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 
 ### Step 1: 侦查
 
-1. 运行 `scripts/scan-workspace.sh [path]` 获取结构化工作区快照（repos、类型、agent 文件、docs）
-2. 区分为仓库 / 文档 / 工具（脚本已做，人工确认）
-3. 读 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`（脚本已标注哪些仓库有）
-4. 读 `docs/` / `README.md`（脚本已列出）
-5. 从代码中识别分层（API → 聚合 → 领域 / 类似结构）
-6. **交叉验证**：对文档中提取的关键事实（API 路径、数据结构、配置项），抽样 grep 代码确认。若文档与代码不一致 → 以代码为准，标注 `⚠️ 文档过时（doc v.s. code）`
+1. 运行 `scripts/scan-workspace.sh [path]` 获取结构化工作区快照
+2. **排除 `.gitignore` 中 ignore 的目录**：`node_modules/`、`dist/`、`vendor/` 等不纳入仓库列表，不创建 CONTEXT.md
+3. 区分为仓库 / 文档 / 工具
+4. 读 `AGENTS.md` / `CLAUDE.md` / `.cursorrules`
+5. 读 `docs/` / `README.md`
+6. 从代码中识别分层（API → 聚合 → 领域 / 类似结构）
+7. **交叉验证**：对文档中提取的关键事实，抽样 grep 代码确认。若文档与代码不一致 → 以代码为准
 
 ### Step 2: Ask user 补齐
 
@@ -193,7 +194,7 @@ Agent 也可以自动安装：`/skill:lore 帮我安装到 Claude Code`
 
 - 遇到新坑 → 追加到 PITFALLS.md
 - 发现代码模式 → 补充 CONVENTIONS.md
-- 新增仓库 → 创建 CONTEXT.md + 更新 MAP.md
+- 新增仓库 → 创建 CONTEXT.md + 更新 MAP.md（排除 `.gitignore` 中的目录）
 
 ### 询问后更新
 
