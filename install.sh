@@ -192,7 +192,22 @@ with open('$HOOKS_FILE') as f:
 for h in cfg.get('hooks', {}).get('PostToolUse', []):
     for inner in h.get('hooks', []):
         cmd = inner.get('command', '')
-        if 'lore-loaded' in cmd or 'lore-check' in cmd:
+        if 'lore-loaded' in cmd or 'lore-check' in cmd or 'lore-event' in cmd:
+            exit(0)
+exit(1)
+" 2>/dev/null
+}
+
+_hook_needs_upgrade() {
+  [[ -f "$HOOKS_FILE" ]] || return 1
+  python3 -c "
+import json
+with open('$HOOKS_FILE') as f:
+    cfg = json.load(f)
+for h in cfg.get('hooks', {}).get('PostToolUse', []):
+    for inner in h.get('hooks', []):
+        cmd = inner.get('command', '')
+        if ('lore-loaded' in cmd or 'lore-check' in cmd) and 'lore-event' not in cmd:
             exit(0)
 exit(1)
 " 2>/dev/null
@@ -202,34 +217,44 @@ LORETHROTTLE=300  # seconds between checks
 
 _hook_add() {
   [[ -f "$HOOKS_FILE" ]] || return 1
-  python3 -c "
-import json
-with open('$HOOKS_FILE') as f:
+  HOOKS_FILE="$HOOKS_FILE" python3 <<'PYEOF'
+import json, os
+
+hooks_file = os.environ["HOOKS_FILE"]
+hook_cmd = (
+    '[ -x "$HOME/.agents/skills/lore/bin/lore-event" ] || return 0; '
+    'STAMP=/tmp/.lore-check; NOW=$(date +%s); LAST=$(cat $STAMP 2>/dev/null || echo 0); '
+    '[ $((NOW - LAST)) -lt 300 ] && return 0; echo $NOW > $STAMP; '
+    'out=$("$HOME/.agents/skills/lore/bin/lore-event" health --cwd "$PWD" 2>/dev/null) || return 0; '
+    'echo "$out" | python3 -c \'import json,sys; d=json.load(sys.stdin); ws=d.get("warnings") or []; '
+    'import sys; (sys.exit(0) if d.get("status")=="healthy" and not ws else '
+    'print("[lore] "+"; ".join(ws[:3]) if ws else "[lore] status="+d.get("status","")))\''
+)
+
+with open(hooks_file) as f:
     cfg = json.load(f)
-hooks = cfg.setdefault('hooks', {})
-ptu = hooks.setdefault('PostToolUse', [])
-# remove any old lore hooks (both v1 one-shot and v2 periodic patterns)
+hooks = cfg.setdefault("hooks", {})
+ptu = hooks.setdefault("PostToolUse", [])
 new_ptu = []
 for h in ptu:
     new_inner = []
-    for inner in h.get('hooks', []):
-        cmd = inner.get('command', '')
-        if 'lore-loaded' not in cmd and 'lore-check' not in cmd:
+    for inner in h.get("hooks", []):
+        cmd = inner.get("command", "")
+        if "lore-loaded" not in cmd and "lore-check" not in cmd and "lore-event" not in cmd:
             new_inner.append(inner)
     if new_inner:
-        h['hooks'] = new_inner
+        h["hooks"] = new_inner
         new_ptu.append(h)
-    elif h.get('matcher', '') != '':
+    elif h.get("matcher", "") != "":
         new_ptu.append(h)
 ptu = new_ptu
-hooks['PostToolUse'] = ptu
-# add new periodic-check hook
-ptu.append({'matcher': '', 'hooks': [{'type': 'command', 'command': '[ -f \"$HOME/.agents/skills/lore/scripts/on-session-start.sh\" ] || return 0; STAMP=/tmp/.lore-check; NOW=$(date +%s); LAST=$(cat $STAMP 2>/dev/null || echo 0); [ $((NOW - LAST)) -lt 300 ] && return 0; echo $NOW > $STAMP; output=$(bash \"$HOME/.agents/skills/lore/scripts/on-session-start.sh\" 2>&1) || { echo \"$output\" | grep -q \"not found\" && return 0; echo \"[lore] $output\"; }'}]})
-with open('$HOOKS_FILE', 'w') as f:
+hooks["PostToolUse"] = ptu
+ptu.append({"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]})
+with open(hooks_file, "w") as f:
     json.dump(cfg, f, indent=2)
-    f.write('\n')
-print('added lore periodic-check hook (every 300s)')
-" 2>/dev/null
+    f.write("\n")
+print("added lore periodic-check hook (lore-event health, every 300s)")
+PYEOF
 }
 
 _hook_remove() {
@@ -245,7 +270,8 @@ new_ptu = []
 for h in ptu:
     new_inner = []
     for inner in h.get('hooks', []):
-        if 'lore-loaded' not in inner.get('command', ''):
+        cmd = inner.get('command', '')
+        if 'lore-loaded' not in cmd and 'lore-check' not in cmd and 'lore-event' not in cmd:
             new_inner.append(inner)
     if new_inner:
         h['hooks'] = new_inner
@@ -458,7 +484,12 @@ do_install() {
 
       if [[ -f "$HOOKS_FILE" ]]; then
         if _hook_has_lore; then
-          _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}already in settings.json${C_RESET}"
+          if _hook_needs_upgrade; then
+            _hook_add && _single_line "$(_icon linked)" "PostToolUse hook" "${C_DIM}upgraded to lore-event health${C_RESET}" \
+              || _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}upgrade failed${C_RESET}"
+          else
+            _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}already in settings.json${C_RESET}"
+          fi
         else
           _hook_add && _single_line "$(_icon linked)" "PostToolUse hook" "${C_DIM}added to settings.json${C_RESET}" \
             || _single_line "$(_icon skip)" "PostToolUse hook" "${C_DIM}skipped (format unknown)${C_RESET}"
