@@ -298,6 +298,60 @@ if bare_refs:
 else:
     ok_items.append("self-contained: facts inlined")
 
+# 4.5. Wikilink cross-references + loose ref migration hints
+wikilink_results = []
+loose_refs = []
+for rel, abs_path in sorted(kb_files.items()):
+    content = read_file(abs_path)
+    if not content:
+        continue
+    # Check [[wikilinks]]
+    for m in re.finditer(r'\[\[([^\]]+)\]\]', content):
+        target = m.group(1)
+        line = content[:m.start()].count('\n') + 1
+        # Resolve: strip anchor, check file exists
+        target_file = target.split('#')[0] if '#' in target else target
+        if not target_file.endswith('.md'):
+            target_file += '.md'
+        # Try relative to the source file's directory
+        src_dir = os.path.dirname(abs_path)
+        resolved = os.path.normpath(os.path.join(src_dir, target_file))
+        if not os.path.isfile(resolved):
+            # Try workspace-level .pikb/
+            resolved2 = os.path.join(pikb, target_file)
+            if not os.path.isfile(resolved2):
+                wikilink_results.append({
+                    "file": rel, "line": line,
+                    "wikilink": target,
+                    "status": "broken",
+                })
+    # Detect loose references (free-text "see X" patterns)
+    for m in re.finditer(r'(?:see|见|参见|参考|refer to)\s+([A-Z]+\.md[#§\d]*)', content, re.IGNORECASE):
+        loose_refs.append({
+            "file": rel,
+            "line": content[:m.start()].count('\n') + 1,
+            "ref": m.group(0),
+            "hint": "consider converting to [[%s]]" % m.group(1),
+        })
+
+if wikilink_results:
+    broken_wl = [w for w in wikilink_results if w["status"] == "broken"]
+    if broken_wl:
+        warnings.append({
+            "check": "wikilinks",
+            "detail": f"{len(broken_wl)} broken wikilink(s)",
+            "items": [f"{w['file']}:{w['line']}: [[{w['wikilink']}]]" for w in broken_wl[:5]],
+        })
+    else:
+        ok_items.append("wikilinks: all valid")
+
+if loose_refs:
+    warnings.append({
+        "check": "loose references",
+        "detail": f"{len(loose_refs)} loose reference(s) — consider converting to wikilinks",
+        "items": [f"{l['file']}:{l['line']}: {l['hint']}" for l in loose_refs[:5]],
+    })
+
 # 5. Status markers
 status_issues = []
 for rel, abs_path in sorted(kb_files.items()):

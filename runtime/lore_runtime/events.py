@@ -196,4 +196,22 @@ def _session_end_event(cwd: str) -> dict:
                           summary.get("pitfall_matches", 0),
                           summary.get("auto_writes", 0),
                           summary.get("drafts", 0)))
+
+    # Wave 3: cross-reference validation
+    try:
+        crossrefs = discover.check_crossrefs(cwd)
+        if crossrefs:
+            broken = [c for c in crossrefs if c["status"] != "ok"]
+            ok_count = len(crossrefs) - len(broken)
+            cr_lines = ["\n[lore] 🔗 cross-reference check:"]
+            for c in broken:
+                cr_lines.append("  ❌ %s:%d → %s — %s" % (
+                    c["source_file"], c["line"], c["wikilink"], c.get("detail", "")
+                ))
+            if ok_count:
+                cr_lines.append("  ✅ %d references OK" % ok_count)
+            r["additional_context"] += "\n".join(cr_lines)
+    except Exception:
+        pass
+
     return r
