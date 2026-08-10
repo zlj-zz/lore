@@ -66,6 +66,14 @@ elif [[ -n "$LORE_CMD" ]]; then
   fi
 fi
 
+# ── Wave 2: after_error matching ──
+if [[ -n "$LORE_CWD" ]]; then
+  if json="$(lore_event after_error --cwd "$LORE_CWD" --error "${LORE_CMD:-}" 2>/dev/null)"; then
+    err_ctx="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("additional_context",""))' 2>/dev/null || true)"
+    [[ -n "$err_ctx" ]] && notes+=("$err_ctx")
+  fi
+fi
+
 stamp="/tmp/.lore-cursor-check"
 now="$(date +%s)"
 last=0

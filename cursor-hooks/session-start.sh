@@ -37,14 +37,44 @@ if ! json="$(lore_event session_start --cwd "$cwd" 2>/dev/null)"; then
   exit 0
 fi
 
-printf '%s' "$json" | python3 -c '
+# ── Wave 2: catch up on leftover session_end tasks from previous session ──
+catchup=""
+if json2="$(lore_event session_end --cwd "$cwd" 2>/dev/null)"; then
+  catchup="$(printf '%s' "$json2" | python3 -c '
 import json, sys
 try:
     r = json.load(sys.stdin)
+    stale = r.get("staleness", {})
+    proposals = r.get("maintenance_proposals", [])
+    parts = []
+    if stale.get("stale"):
+        parts.append("[lore] KB maintenance needed from last session:")
+        for iss in stale.get("issues", []):
+            parts.append("  - %s: %s" % (iss.get("check", ""), iss.get("detail", "")))
+    if proposals:
+        for p in proposals:
+            parts.append("  [%s] %s: %s" % (p.get("type", ""), p.get("target", ""), p.get("detail", "")))
+    if parts:
+        print("\n".join(parts))
+except Exception:
+    pass
+' 2>/dev/null || true)"
+fi
+
+LORE_CATCHUP="$catchup"
+
+printf '%s' "$json" | python3 -c "
+import json, sys, os
+try:
+    r = json.load(sys.stdin)
+    ctx = r.get('additional_context', '')
+    catchup = os.environ.get('LORE_CATCHUP', '')
+    if catchup:
+        ctx = catchup + '\n\n' + ctx if ctx else catchup
     print(json.dumps({
-        "additional_context": r.get("additional_context", ""),
-        "env": r.get("env") or {},
+        'additional_context': ctx,
+        'env': r.get('env') or {},
     }, ensure_ascii=False))
 except Exception:
-    print("{}")
-' 2>/dev/null || echo '{}'
+    print('{}')
+" 2>/dev/null || echo '{}'

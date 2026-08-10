@@ -339,6 +339,15 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`[lore] 📋 ${count} errors in log — /skill:lore 检查是否需要更新 PITFALLS`, "info");
       }
     }
+
+    // ── Wave 2: session_end summary every REFRESH_INTERVAL turns ──
+    const sessionEndResult = runLoreEvent("session_end", { cwd });
+    if (sessionEndResult?.additional_context) {
+      pi.sendMessage(
+        { customType: "lore-session-summary", content: sessionEndResult.additional_context, display: false },
+        { triggerTurn: false },
+      );
+    }
   });
 
   // ── Tool end: detect new repo ──
@@ -363,6 +372,26 @@ export default function (pi: ExtensionAPI) {
           }
         }
       } catch { /* ignore */ }
+
+      // ── Wave 2: after_error PITFALLS matching ──
+      const errorMsg = String((event as any).result?.content ?? event.toolName ?? "unknown");
+      const errorResult = runLoreEvent("after_error", { cwd, cmd: errorMsg });
+      if (errorResult?.additional_context) {
+        pendingPitfallContext = pendingPitfallContext
+          ? `${pendingPitfallContext}\n\n${errorResult.additional_context}`
+          : errorResult.additional_context;
+      }
+      if (errorResult?.matches?.length) {
+        for (const m of errorResult.matches) {
+          matchedPitfallIds.add(m.id);
+          if (m.title) matchedPitfallTitles.add(m.title);
+        }
+        ctx.ui.setStatus("lore", "📚 l ⚠");
+        ctx.ui.notify(
+          `[lore] ⚠ error matched PITFALLS #${[...matchedPitfallIds].join(",#")}`,
+          "warn",
+        );
+      }
     }
 
     const toolName = event.toolName;
