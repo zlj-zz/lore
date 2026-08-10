@@ -6,7 +6,6 @@ any extra keyword fields.  ``None`` field values are filtered out.
 """
 
 import json
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +16,11 @@ _SESSION_ID = uuid.uuid4().hex[:12]
 
 _LOG_FILE = ".lore-session-log.jsonl"
 _PIKB_DIR = ".pikb"
+
+
+def _resolve_log_path(cwd: str) -> Path:
+    """Compute the log file path without creating any directories."""
+    return Path(cwd) / _PIKB_DIR / _LOG_FILE
 
 
 def _log_path(cwd: str) -> str:
@@ -40,15 +44,14 @@ def append(cwd: str, event: str, **fields: Any) -> None:
     record = {k: v for k, v in record.items() if v is not None}
 
     log_path = _log_path(cwd)
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
 
 def read_all_sessions(cwd: str) -> List[Dict[str, Any]]:
     """Read all log lines from the log file regardless of session."""
-    log_path = _log_path(cwd)
-    if not os.path.exists(log_path):
+    log_path = _resolve_log_path(cwd)
+    if not log_path.is_file():
         return []
     records: List[Dict[str, Any]] = []
     with open(log_path, "r", encoding="utf-8") as f:
@@ -81,8 +84,9 @@ def summarize(cwd: str) -> Dict[str, int]:
     }
     for rec in read_session(cwd):
         event = rec.get("event")
-        if event in ("after_edit", "after_shell") and rec.get("matches"):
-            counts["pitfall_matches"] += 1
+        if event in ("after_edit", "after_shell"):
+            # Count individual matches, not events.
+            counts["pitfall_matches"] += len(rec.get("matches") or [])
         elif event == "auto_maintain":
             counts["auto_writes"] += 1
         elif event == "draft":

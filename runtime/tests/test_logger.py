@@ -10,13 +10,8 @@ class TestLogger(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.pikb = Path(self.tmp.name) / ".pikb"
         self.pikb.mkdir()
-        import lore_runtime.logger as logger_mod
-        self._orig_log_path = logger_mod._log_path
-        logger_mod._log_path = staticmethod(lambda cwd: str(Path(cwd) / ".pikb" / ".lore-session-log.jsonl"))
 
     def tearDown(self):
-        import lore_runtime.logger as logger_mod
-        logger_mod._log_path = self._orig_log_path
         self.tmp.cleanup()
 
     def _log_path(self):
@@ -46,7 +41,7 @@ class TestLogger(unittest.TestCase):
         append(self.tmp.name, event="after_edit", path="a.ts")
         append(self.tmp.name, event="session_end")
         lines = read_session(self.tmp.name)
-        self.assertGreaterEqual(len(lines), 1)
+        self.assertEqual(len(lines), 3)
 
     def test_summarize_counts_events(self):
         from lore_runtime.logger import append, summarize
@@ -59,10 +54,39 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(s["pitfall_matches"], 2)
         self.assertEqual(s["auto_writes"], 1)
 
+    def test_summarize_counts_each_match_not_just_events(self):
+        from lore_runtime.logger import append, summarize
+        # One after_edit with multiple matches counts each match individually.
+        append(self.tmp.name, event="after_edit", matches=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+        s = summarize(self.tmp.name)
+        self.assertEqual(s["pitfall_matches"], 3)
+
     def test_summarize_empty_log(self):
         from lore_runtime.logger import summarize
         s = summarize("/nonexistent/path")
         self.assertEqual(s["pitfall_matches"], 0)
+
+    def test_read_all_sessions_includes_other_sessions(self):
+        from lore_runtime.logger import append, read_all_sessions, read_session
+        append(self.tmp.name, event="session_start")
+        # Simulate a record written by a different session/process.
+        with open(self._log_path(), "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "ts": "2026-01-01T00:00:00+00:00",
+                "session": "other-session",
+                "event": "session_start",
+            }) + "\n")
+        self.assertEqual(len(read_all_sessions(self.tmp.name)), 2)
+        self.assertEqual(len(read_session(self.tmp.name)), 1)
+
+    def test_append_filters_none_values(self):
+        from lore_runtime.logger import append
+        append(self.tmp.name, event="after_edit", path=None, notes=None, matches=[])
+        with open(self._log_path()) as f:
+            record = json.loads(f.readline())
+        self.assertNotIn("path", record)
+        self.assertNotIn("notes", record)
+        self.assertEqual(record["matches"], [])
 
 
 if __name__ == "__main__":
