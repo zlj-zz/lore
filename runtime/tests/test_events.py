@@ -185,5 +185,62 @@ class TestCLISessionEnd(unittest.TestCase):
         self.assertEqual(data["event"], "after_error")
 
 
+class TestHotspots(unittest.TestCase):
+    def test_parse_context_extracts_hotspots(self):
+        from lore_runtime.context import parse_context
+
+        content = """# test-service
+Description.
+
+## Entry
+- main: cmd/main.go
+
+## Hotspots
+| File pattern | Why | Refs |
+|-------------|-----|------|
+| internal/handler/ | core logic | [[PITFALLS#1]] |
+| db/migrations/ | schema changes | [[CONVENTIONS#db]] |
+"""
+        result = parse_context(content)
+        self.assertEqual(len(result["hotspots"]), 2)
+        self.assertEqual(result["hotspots"][0]["pattern"], "internal/handler/")
+        self.assertEqual(result["hotspots"][0]["why"], "core logic")
+        self.assertEqual(result["hotspots"][0]["refs"], ["PITFALLS#1"])
+        self.assertEqual(result["hotspots"][1]["refs"], ["CONVENTIONS#db"])
+        self.assertEqual(result["entry_points"], ["main: cmd/main.go"])
+        self.assertEqual(result["desc"], "# test-service\nDescription.")
+
+    def test_parse_context_missing_sections(self):
+        from lore_runtime.context import parse_context
+
+        result = parse_context("# only title\nno sections here\n")
+        self.assertEqual(result["hotspots"], [])
+        self.assertEqual(result["entry_points"], [])
+        self.assertIn("only title", result["desc"])
+
+    def test_match_hotspots_finds_match(self):
+        from lore_runtime.context import match_hotspots
+
+        matches = match_hotspots(str(FIXTURE / "app"), "internal/handler/checkout.go")
+        self.assertIsInstance(matches, list)
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["pattern"], "internal/handler/")
+
+    def test_match_hotspots_no_context(self):
+        import tempfile
+
+        from lore_runtime.context import match_hotspots
+
+        with tempfile.TemporaryDirectory() as tmp:
+            matches = match_hotspots(tmp, "internal/handler/checkout.go")
+        self.assertEqual(matches, [])
+
+    def test_match_hotspots_no_match(self):
+        from lore_runtime.context import match_hotspots
+
+        matches = match_hotspots(str(FIXTURE / "app"), "unrelated/file.py")
+        self.assertEqual(matches, [])
+
+
 if __name__ == "__main__":
     unittest.main()
