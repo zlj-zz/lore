@@ -4,6 +4,8 @@
 
 ## N. Title
 
+- Owner: @team
+- Last verified: YYYY-MM-DD
 - Difficulty: ⭐⭐⭐
 - Symptom: what you see
 - Root Cause: why it happens
