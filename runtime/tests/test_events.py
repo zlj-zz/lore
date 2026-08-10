@@ -68,6 +68,8 @@ class TestPitfalls(unittest.TestCase):
         self.assertEqual(len(r["matches"]), 1)
         self.assertEqual(r["matches"][0]["id"], "1")
         self.assertIn("Auth middleware", r["additional_context"])
+        self.assertIn("body", r["matches"][0])
+        self.assertIn("401", r["additional_context"])  # Symptom from fixture
 
     def test_after_edit_miss(self):
         from lore_runtime.events import handle
