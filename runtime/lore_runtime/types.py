@@ -21,3 +21,19 @@ def empty_result(event: str, cwd: str) -> dict:
         "env": {"LORE_LOADED": "0", "LORE_CONTEXT": "", "LORE_CWD": cwd},
         "matches": [],
     }
+
+
+def session_end_summary_template() -> dict:
+    return {
+        "session_summary": {
+            "pitfall_matches": 0,
+            "auto_writes": 0,
+            "drafts": 0,
+            "errors_logged": 0,
+        },
+        "staleness": {
+            "stale": False,
+            "issues": [],
+        },
+        "maintenance_proposals": [],
+    }

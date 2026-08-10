@@ -7,13 +7,17 @@ from lore_runtime.events import handle
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="lore-event")
-    parser.add_argument("event", choices=["session_start", "after_edit", "after_shell", "health"])
+    parser.add_argument("event", choices=["session_start", "after_edit", "after_shell", "health", "session_end", "after_error"])
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--path", default="")
     parser.add_argument("--cmd", default="")
+    parser.add_argument("--error", default="")
     args = parser.parse_args(argv)
     try:
-        result = handle(args.event, args.cwd, path=args.path or None, cmd=args.cmd or None)
+        result = handle(args.event, args.cwd,
+                        path=args.path or None,
+                        cmd=args.cmd or None,
+                        error=args.error or None)
     except Exception as e:
         result = {
             "ok": False,
