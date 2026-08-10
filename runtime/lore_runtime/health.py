@@ -1,8 +1,10 @@
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
 from lore_runtime import discover
+from lore_runtime.pitfalls import _extract_field
 from lore_runtime.types import STATUS_DEGRADED, STATUS_HEALTHY, STATUS_MISSING
 
 REPO_MARKERS = {
@@ -52,6 +54,45 @@ def check(cwd: str) -> dict:
                     warnings.append(f"KB age: oldest file modified {age_days:.0f}d ago")
                 else:
                     ok_items.append(f"KB freshness: {age_days:.0f}d old, newest {newest_age:.0f}d")
+            except Exception:
+                pass
+
+            # Per-entry PITFALLS Last-verified staleness
+            try:
+                pitfalls_path = Path(pikb) / "PITFALLS.md"
+                if pitfalls_path.is_file():
+                    file_mtime = pitfalls_path.stat().st_mtime
+                    raw = pitfalls_path.read_text(encoding="utf-8", errors="replace")
+                    sections = re.split(r"^## ", raw, flags=re.M)[1:]
+                    for sec in sections:
+                        m = re.match(r"^(\d+)\.\s*(.+)", sec)
+                        if not m:
+                            continue
+                        pid = m.group(1)
+                        title = m.group(2).strip().splitlines()[0].strip()
+                        owner = _extract_field(sec, "Owner")
+                        lv = _extract_field(sec, "Last verified")
+                        lv_ts = None
+                        if lv:
+                            try:
+                                lv_ts = datetime.strptime(lv.strip(), "%Y-%m-%d").timestamp()
+                            except (ValueError, TypeError):
+                                lv_ts = None
+                        # Entries without a parseable Last verified fall back to
+                        # file mtime (backward compat) and stay covered by the
+                        # file-level KB age check above.
+                        if lv_ts is None:
+                            continue
+                        now = datetime.now().timestamp()
+                        lv_age = (now - lv_ts) / 86400
+                        mtime_age = (now - file_mtime) / 86400
+                        entry_age_days = max(lv_age, mtime_age)
+                        if entry_age_days > 90:
+                            owner_note = " (Owner: %s)" % owner if owner else ""
+                            warnings.append(
+                                "PITFALLS #%s '%s': Last-verified %dd ago%s"
+                                % (pid, title, int(entry_age_days), owner_note)
+                            )
             except Exception:
                 pass
 

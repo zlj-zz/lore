@@ -52,7 +52,16 @@ def match(cwd: str, path: str = "", cmd: str = "") -> List[dict]:
                     body_end = i
                     break
             body = "\n".join(body_lines[body_start:body_end]).strip()
-            matched.append({"id": pid, "title": title, "difficulty": diff, "body": body})
+            owner = _extract_field(body, "Owner")
+            last_verified = _extract_field(body, "Last verified")
+            matched.append({
+                "id": pid,
+                "title": title,
+                "difficulty": diff,
+                "body": body,
+                "owner": owner,
+                "last_verified": last_verified,
+            })
 
     return matched
 

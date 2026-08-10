@@ -6,11 +6,13 @@ executes the actual KB writes (Edit/Write tool calls).
 """
 
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from lore_runtime import discover
+from lore_runtime.pitfalls import _extract_field
 
 REPO_MARKERS = {
     "go.mod", "package.json", "Cargo.toml", ".git",
@@ -72,13 +74,49 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
                     "detail": "KB last updated %.0fd ago" % age_days,
                     "action": "review and refresh KB entries",
                 })
+
+        # Per-entry PITFALLS Last-verified staleness
+        pitfalls_file = Path(pikb) / "PITFALLS.md"
+        if pitfalls_file.is_file():
+            content = pitfalls_file.read_text(encoding="utf-8", errors="replace")
+            file_mtime = pitfalls_file.stat().st_mtime
+            for pm in re.finditer(r'^## (\d+)\. (.+)$', content, re.MULTILINE):
+                pid, title = pm.group(1), pm.group(2)
+                end = content.find('\n## ', pm.end())
+                if end == -1:
+                    end = len(content)
+                section = content[pm.end():end]
+                owner = _extract_field(section, "Owner")
+                lv = _extract_field(section, "Last verified")
+                lv_ts = None
+                if lv:
+                    try:
+                        lv_ts = datetime.strptime(lv.strip(), "%Y-%m-%d").timestamp()
+                    except (ValueError, TypeError):
+                        lv_ts = None
+                # Entries without a parseable Last verified fall back to file
+                # mtime (backward compat) and stay covered by the MAP.md check.
+                if lv_ts is None:
+                    continue
+                now = datetime.now().timestamp()
+                lv_age = (now - lv_ts) / 86400
+                mtime_age = (now - file_mtime) / 86400
+                entry_age = max(lv_age, mtime_age)
+                if entry_age > 90:
+                    issues.append({
+                        "check": "KB age",
+                        "severity": "warning",
+                        "detail": "PITFALLS #%s '%s' Last-verified %dd ago"
+                                  % (pid, title, int(entry_age)),
+                        "action": "review and refresh PITFALLS #%s" % pid,
+                        "owner": owner,
+                    })
     except Exception:
         pass
 
     # 3. PITFALLS triggers completeness
     pitfalls_file = Path(pikb) / "PITFALLS.md"
     if pitfalls_file.is_file():
-        import re
         content = pitfalls_file.read_text(encoding="utf-8", errors="replace")
         for m in re.finditer(r'^## (\d+)\. (.+)$', content, re.MULTILINE):
             pid, title = m.group(1), m.group(2)
@@ -87,12 +125,16 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
                 end = len(content)
             section = content[m.end():end]
             if 'Triggers:' not in section:
-                issues.append({
+                issue = {
                     "check": "PITFALLS Triggers",
                     "severity": "warning",
                     "detail": "PITFALLS #%s '%s' missing Triggers:" % (pid, title),
                     "action": "add Triggers: field to PITFALLS #%s" % pid,
-                })
+                }
+                owner = _extract_field(section, "Owner")
+                if owner:
+                    issue["owner"] = owner
+                issues.append(issue)
 
     return {
         "stale": len(issues) > 0,
@@ -140,18 +182,26 @@ def generate_proposals(cwd: str, stale: Dict[str, Any]) -> List[Dict[str, Any]]:
             })
 
         elif check == "KB age":
+            detail = issue.get("detail", "KB may be stale")
+            owner = issue.get("owner", "")
+            if owner:
+                detail += " (Owner: %s)" % owner
             proposals.append({
                 "type": "draft",
                 "target": "MAP.md",
-                "detail": issue.get("detail", "KB may be stale"),
+                "detail": detail,
                 "action": action,
             })
 
         elif check == "PITFALLS Triggers":
+            detail = issue.get("detail", "missing Triggers")
+            owner = issue.get("owner", "")
+            if owner:
+                detail += " (Owner: %s)" % owner
             proposals.append({
                 "type": "auto",
                 "target": "PITFALLS.md",
-                "detail": issue.get("detail", "missing Triggers"),
+                "detail": detail,
                 "action": action,
             })
 

@@ -88,6 +88,17 @@ class TestPitfalls(unittest.TestCase):
         r = handle("after_shell", str(FIXTURE / "app"), cmd="npm run migrate auth")
         self.assertEqual(r["matches"][0]["id"], "1")
 
+    def test_after_edit_returns_owner_fields(self):
+        from lore_runtime.events import handle
+
+        r = handle(
+            "after_edit",
+            str(FIXTURE / "app"),
+            path=str(FIXTURE / "app" / "middleware" / "auth.ts"),
+        )
+        self.assertIn("owner", r["matches"][0])
+        self.assertIn("last_verified", r["matches"][0])
+
 
 class TestCLI(unittest.TestCase):
     def test_cli_json_stdout(self):
