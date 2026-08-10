@@ -18,7 +18,7 @@ During work:
 Search KB: `~/.agents/skills/lore/scripts/quick-ref.sh <keyword>`
 Missing KB in complex workspace → `/skill:lore 创建知识库`"""
 
-CONTEXT_MAX_CHARS = 2048
+CONTEXT_MAX_CHARS = 500
 MAP_MAX_LINES = 80
 
 

@@ -1,3 +1,5 @@
+import os
+import re
 from pathlib import Path
 
 from lore_runtime.types import empty_result, session_end_summary_template
@@ -11,6 +13,9 @@ try:
     from lore_runtime import maintenance as maintenance_mod
 except ImportError:
     maintenance_mod = None
+
+LORE_CONTEXT_MAX_CHARS = 500
+_HOTSPOT_LOADING = os.environ.get("LORE_HOTSPOT_LOADING") == "1"
 
 
 def handle(event: str, cwd: str, path: str = None, cmd: str = None, error: str = None) -> dict:
@@ -40,6 +45,35 @@ def _pitfalls_event(event: str, cwd: str, path: str, cmd: str) -> dict:
             cwd, path, matches
         )
         logger_mod.append(cwd, event, path=path, cmd=cmd, matches=matches)
+
+    # Wave 3: Hotspot-triggered loading (opt-in via LORE_HOTSPOT_LOADING=1).
+    if _HOTSPOT_LOADING and path:
+        hotspots = context_mod.match_hotspots(cwd, path)
+        if hotspots:
+            hotspot_lines = []
+            for h in hotspots:
+                hotspot_lines.append(
+                    "[lore] 📍 %s — %s" % (h["pattern"], h.get("why", ""))
+                )
+                for ref in h.get("refs", []):
+                    # Dedup: if a hotspot ref is a PITFALLS already matched
+                    # above, show a link but don't re-inject the body.
+                    pitfall_id = None
+                    m = re.match(r"PITFALLS?#?(\d+)", ref)
+                    if m:
+                        pitfall_id = m.group(1)
+                    if pitfall_id and any(match["id"] == pitfall_id for match in matches):
+                        hotspot_lines.append(
+                            "  → PITFALLS #%s (injected above)" % pitfall_id
+                        )
+                    else:
+                        hotspot_lines.append("  → %s" % ref)
+            if hotspot_lines:
+                ctx = "\n".join(hotspot_lines)
+                if r["additional_context"]:
+                    r["additional_context"] += "\n\n" + ctx
+                else:
+                    r["additional_context"] = ctx
     return r
 
 
@@ -56,6 +90,10 @@ def _session_start_event(cwd: str) -> dict:
     r = empty_result("session_start", cwd)
     h = health_mod.check(cwd)
     text, ctx_path, ctx_warnings = context_mod.build_session_additional_context(cwd)
+    if text:
+        # Truncate so the CONTEXT.md portion stays compact: keep RULES + marker
+        # + first LORE_CONTEXT_MAX_CHARS characters of the injected context.
+        text = text[: len(context_mod.RULES) + len("📚 lore loaded") + LORE_CONTEXT_MAX_CHARS]
     health_notes = _format_health_notes(h["status"], h["warnings"])
     if health_notes:
         text = (text + "\n\n" + health_notes) if text else health_notes
