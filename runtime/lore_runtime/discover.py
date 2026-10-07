@@ -3,6 +3,10 @@ from pathlib import Path
 from typing import List, Optional
 
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+# Markdown inline link, excluding images (![alt](url)).
+MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)\s]+)\)")
+# Characters GitHub strips when building a heading anchor.
+_SLUG_STRIP_RE = re.compile(r"[^\w\u4e00-\u9fff \-]")
 
 
 def find_context(start: str) -> Optional[Path]:
@@ -48,6 +52,25 @@ def find_pitfalls(start: str) -> List[Path]:
         if cur.parent == cur:
             break
         cur = cur.parent
+    return found
+
+
+def find_all_pitfalls(workspace: str) -> List[Path]:
+    """PITFALLS files relevant to a workspace: the workspace-level
+    ``.pikb/PITFALLS.md`` plus every repo's ``.pi/kb/PITFALLS.md``."""
+    root = Path(workspace).resolve()
+    found: List[Path] = []
+    workspace_pf = root / ".pikb" / "PITFALLS.md"
+    if workspace_pf.is_file():
+        found.append(workspace_pf)
+    try:
+        for entry in sorted(root.iterdir()):
+            if entry.is_dir() and not entry.name.startswith("."):
+                repo_pf = entry / ".pi" / "kb" / "PITFALLS.md"
+                if repo_pf.is_file():
+                    found.append(repo_pf)
+    except OSError:
+        pass
     return found
 
 
@@ -118,6 +141,64 @@ def resolve_wikilink(link: str, cwd: str) -> dict:
     return {"resolved": path, "anchor": matched_header, "error": None}
 
 
+def github_slug(text: str) -> str:
+    """Approximate GitHub's heading anchor: lowercase, drop punctuation,
+    collapse whitespace, spaces to hyphens. Keeps CJK and underscores."""
+    s = _SLUG_STRIP_RE.sub("", text.strip().lower())
+    s = re.sub(r"\s+", " ", s).strip()
+    return s.replace(" ", "-")
+
+
+def heading_anchors(text: str) -> set:
+    """Every GitHub-style anchor in a markdown document, including the
+    ``-1`` / ``-2`` suffixes GitHub appends to duplicate headings."""
+    anchors = set()
+    seen = {}
+    for line in text.splitlines():
+        if not line.startswith("#"):
+            continue
+        base = github_slug(line.lstrip("#").strip())
+        if not base:
+            continue
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        anchors.add(base if n == 0 else "%s-%d" % (base, n))
+    return anchors
+
+
+def resolve_markdown_link(url: str, source_dir: Path) -> dict:
+    """Resolve a relative markdown link against its file's directory.
+
+    Only relative ``.md`` targets are checked; absolute URLs, bare anchors and
+    non-``.md`` targets return ``skip=True`` so they are not reported.
+    Returns {resolved, anchor, error, skip}.
+    """
+    raw = url.strip()
+    if not raw or "://" in raw or raw.startswith(("/", "#", "mailto:", "tel:")):
+        return {"resolved": None, "anchor": None, "error": None, "skip": True}
+    target_part, _, anchor = raw.partition("#")
+    target_part = target_part.strip()
+    if not target_part.lower().endswith(".md"):
+        return {"resolved": None, "anchor": None, "error": None, "skip": True}
+    try:
+        target = (source_dir / target_part).resolve()
+    except OSError:
+        target = None
+    if target is None or not target.is_file():
+        return {"resolved": None, "anchor": None,
+                "error": "file not found: %s" % target_part, "skip": False}
+    if not anchor:
+        return {"resolved": target, "anchor": None, "error": None, "skip": False}
+    try:
+        text = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {"resolved": target, "anchor": None, "error": None, "skip": False}
+    if anchor.strip("-").lower() not in {a.strip("-") for a in heading_anchors(text)}:
+        return {"resolved": target, "anchor": None,
+                "error": "anchor not found: %s" % anchor, "skip": False}
+    return {"resolved": target, "anchor": anchor, "error": None, "skip": False}
+
+
 def _resolve_kb_file(target: str, cwd: str) -> Optional[Path]:
     """Locate a KB file for ``target`` (with .md) under ``cwd``.
 
@@ -184,11 +265,29 @@ def _match_anchor(path: Path, anchor: str) -> Optional[str]:
     return None
 
 
+def _classify(resolved: dict) -> tuple:
+    """Map a resolve result to (status, detail)."""
+    if resolved["error"] is None:
+        detail = str(resolved["resolved"])
+        if resolved["anchor"]:
+            detail += " #%s" % resolved["anchor"]
+        return "ok", detail
+    if resolved["error"].startswith("file not found"):
+        return "broken_file", resolved["error"]
+    if "anchor" in resolved["error"]:
+        return "broken_anchor", resolved["error"]
+    return "broken_file", resolved["error"]
+
+
 def check_crossrefs(cwd: str) -> list:
-    """Scan all KB .md files for [[wikilinks]], verify each resolves.
+    """Scan all KB .md files for cross-references, verify each resolves.
+
+    Checks both ``[[wikilink]]`` syntax and relative markdown links to .md
+    files. Each reference is resolved from its containing file, not from cwd.
 
     Returns list of dicts:
       {source_file, line, wikilink, status: ok|broken_file|broken_anchor, detail}
+    where ``wikilink`` is the raw reference text (either syntax).
     """
     results = []
     root = Path(cwd).resolve()
@@ -210,32 +309,22 @@ def check_crossrefs(cwd: str) -> list:
         except OSError:
             continue
         for lineno, line in enumerate(lines, start=1):
+            refs = []
             for match in WIKILINK_RE.finditer(line):
-                wikilink = match.group(1).strip()
-                if not wikilink:
-                    continue
-                # Resolve from the containing file, not the scan root: a KB
-                # file's wikilink points at its own workspace's .pikb/, which
-                # may not be an ancestor of cwd (e.g. nested workspaces).
-                resolved = resolve_wikilink(wikilink, str(path.parent))
-                if resolved["error"] is None:
-                    status = "ok"
-                    detail = str(resolved["resolved"])
-                    if resolved["anchor"]:
-                        detail += " #%s" % resolved["anchor"]
-                elif resolved["error"].startswith("file not found"):
-                    status = "broken_file"
-                    detail = resolved["error"]
-                elif "anchor" in resolved["error"]:
-                    status = "broken_anchor"
-                    detail = resolved["error"]
-                else:
-                    status = "broken_file"
-                    detail = resolved["error"]
+                link = match.group(1).strip()
+                if link:
+                    refs.append((link, resolve_wikilink(link, str(path.parent))))
+            for match in MARKDOWN_LINK_RE.finditer(line):
+                url = match.group(2).strip()
+                resolved = resolve_markdown_link(url, path.parent)
+                if not resolved["skip"]:
+                    refs.append((url, resolved))
+            for ref, resolved in refs:
+                status, detail = _classify(resolved)
                 results.append({
                     "source_file": str(path),
                     "line": lineno,
-                    "wikilink": wikilink,
+                    "wikilink": ref,
                     "status": status,
                     "detail": detail,
                 })

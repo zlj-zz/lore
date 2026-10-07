@@ -142,5 +142,69 @@ class TestCheckCrossrefs(unittest.TestCase):
         self.assertEqual(results[0]["status"], "broken_file")
 
 
+class TestMarkdownLinks(unittest.TestCase):
+    def test_resolve_relative_md_ok(self):
+        from lore_runtime.discover import resolve_markdown_link
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "PITFALLS.md").write_text("## 1. Trap\n", encoding="utf-8")
+            r = resolve_markdown_link("./PITFALLS.md#1-trap", root)
+        self.assertFalse(r["skip"])
+        self.assertIsNone(r["error"])
+
+    def test_resolve_relative_md_missing_file(self):
+        from lore_runtime.discover import resolve_markdown_link
+        r = resolve_markdown_link("./NOPE.md", Path("/tmp"))
+        self.assertFalse(r["skip"])
+        self.assertIn("not found", r["error"])
+
+    def test_resolve_relative_md_broken_anchor(self):
+        from lore_runtime.discover import resolve_markdown_link
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "MAP.md").write_text("## 5. Menu\n", encoding="utf-8")
+            r = resolve_markdown_link("./MAP.md#4-menu", root)
+        self.assertIsNotNone(r["resolved"])
+        self.assertIn("anchor", r["error"])
+
+    def test_trailing_hyphen_anchor_tolerated(self):
+        # Emoji headings generate a trailing hyphen in the anchor; accept both.
+        from lore_runtime.discover import resolve_markdown_link
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "MAP.md").write_text("### 5. 菜单 CUD 与管理查询 ✅\n", encoding="utf-8")
+            r = resolve_markdown_link("./MAP.md#5-菜单-cud-与管理查询-", root)
+        self.assertIsNone(r["error"])
+
+    def test_skip_external_and_non_md(self):
+        from lore_runtime.discover import resolve_markdown_link
+        for url in ("https://x.com/a.md", "/abs/a.md", "#anchor", "./img.png", "mailto:a@b"):
+            self.assertTrue(resolve_markdown_link(url, Path("/tmp"))["skip"], url)
+
+    def test_github_slug_keeps_cjk_drops_punct(self):
+        from lore_runtime.discover import github_slug
+        self.assertEqual(github_slug("5. 菜单 CUD 与管理查询 ✅"), "5-菜单-cud-与管理查询")
+
+    def test_check_crossrefs_includes_markdown_links(self):
+        from lore_runtime.discover import check_crossrefs
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".pikb").mkdir()
+            (root / ".pikb" / "MAP.md").write_text("## 1. A\n", encoding="utf-8")
+            (root / ".pikb" / "NOTES.md").write_text("see [x](./MAP.md#1-a)\n", encoding="utf-8")
+            results = check_crossrefs(tmp)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], "ok")
+
+    def test_check_crossrefs_ignores_image_links(self):
+        from lore_runtime.discover import check_crossrefs
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".pikb").mkdir()
+            (root / ".pikb" / "NOTES.md").write_text("![alt](./missing.md)\n", encoding="utf-8")
+            results = check_crossrefs(tmp)
+        self.assertEqual(results, [])
+
+
 if __name__ == "__main__":
     unittest.main()
