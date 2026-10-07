@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -9,6 +10,11 @@ FIXTURE = Path(__file__).resolve().parent / "fixtures" / "mini-ws"
 class TestMaintenance(unittest.TestCase):
     def test_check_staleness_fixture_is_fresh(self):
         from lore_runtime.maintenance import check_staleness
+        # The KB-age check reads file mtimes; a long-lived checkout makes the
+        # static fixture look old. Refresh mtimes so this tests structure.
+        now = time.time()
+        for rel in (".pikb/MAP.md", ".pikb/PITFALLS.md", ".pikb/CONVENTIONS.md"):
+            os.utime(FIXTURE / rel, (now, now))
         result = check_staleness(str(FIXTURE))
         self.assertIn("stale", result)
         # mini-ws has one repo with CONTEXT.md and PITFALLS with Triggers
