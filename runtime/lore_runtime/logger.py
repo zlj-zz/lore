@@ -6,6 +6,7 @@ any extra keyword fields.  ``None`` field values are filtered out.
 """
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,13 @@ _SESSION_ID = uuid.uuid4().hex[:12]
 
 _LOG_FILE = ".lore-session-log.jsonl"
 _PIKB_DIR = ".pikb"
+
+#: Trim the log once it exceeds this many bytes, keeping the newest half.
+#: Keeping half guarantees the result is under the cap, so the rewrite runs
+#: once per cap crossing, not on every append. Old records of a very long
+#: single session may be dropped, which only undercounts that session's
+#: summarize().
+_MAX_LOG_BYTES = 2_000_000
 
 
 def _resolve_log_path(cwd: str) -> Path:
@@ -34,6 +42,29 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _trim_log(log_path: Path) -> None:
+    """Keep the log bounded to _MAX_LOG_BYTES, retaining the newest bytes.
+
+    Trimming the tail (rather than rotating to a backup) keeps the current
+    session's own records available to summarize(). The size check is cheap,
+    and the rewrite reads only the retained tail.
+    """
+    try:
+        if log_path.stat().st_size <= _MAX_LOG_BYTES:
+            return
+        keep_bytes = _MAX_LOG_BYTES // 2
+        with open(log_path, "rb") as f:
+            f.seek(-keep_bytes, os.SEEK_END)
+            f.readline()  # drop the partial first line
+            tail = f.read()
+        tmp = log_path.with_name(log_path.name + ".tmp")
+        with open(tmp, "wb") as f:
+            f.write(tail)
+        os.replace(tmp, log_path)
+    except OSError:
+        pass
+
+
 def append(cwd: str, event: str, **fields: Any) -> None:
     """Append one log line. Each record has: ts, session, event, plus any extra fields.
 
@@ -44,6 +75,7 @@ def append(cwd: str, event: str, **fields: Any) -> None:
     record = {k: v for k, v in record.items() if v is not None}
 
     log_path = _log_path(cwd)
+    _trim_log(Path(log_path))
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 

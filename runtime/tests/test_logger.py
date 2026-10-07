@@ -79,6 +79,22 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(len(read_all_sessions(self.tmp.name)), 2)
         self.assertEqual(len(read_session(self.tmp.name)), 1)
 
+    def test_append_trims_log_when_over_cap(self):
+        import lore_runtime.logger as lg
+        old_bytes = lg._MAX_LOG_BYTES
+        lg._MAX_LOG_BYTES = 500
+        try:
+            for i in range(50):
+                lg.append(self.tmp.name, event="after_edit", path=f"f{i}.ts")
+            size = os.path.getsize(self._log_path())
+            with open(self._log_path()) as f:
+                lines = f.readlines()
+        finally:
+            lg._MAX_LOG_BYTES = old_bytes
+        # 50 lines are ~4.5 KB; the cap holds the file near the threshold.
+        self.assertLess(size, 1000)
+        self.assertEqual(json.loads(lines[-1])["path"], "f49.ts")
+
     def test_append_filters_none_values(self):
         from lore_runtime.logger import append
         append(self.tmp.name, event="after_edit", path=None, notes=None, matches=[])
