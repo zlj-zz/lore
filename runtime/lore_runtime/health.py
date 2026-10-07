@@ -43,15 +43,24 @@ def check(cwd: str) -> dict:
             ok_items.append(f"KB files: {len(kb_files)} files")
 
             try:
-                newest = max(os.path.getmtime(f) for f in kb_files)
-                oldest = min(os.path.getmtime(f) for f in kb_files)
-                age_days = (datetime.now().timestamp() - oldest) / 86400
-                newest_age = (datetime.now().timestamp() - newest) / 86400
+                now = datetime.now().timestamp()
+                newest_age = (now - max(os.path.getmtime(f) for f in kb_files)) / 86400
+                # Freshness keys off MAP.md (the KB index, same signal as
+                # maintenance.check_staleness) so static files like README.md
+                # cannot drag an otherwise-current KB into "stale". Fall back
+                # to the oldest file when there is no MAP.md.
+                map_md = Path(pikb) / "MAP.md"
+                if map_md.is_file():
+                    age_ref, age_label = str(map_md), "MAP.md"
+                else:
+                    age_ref = min(kb_files, key=os.path.getmtime)
+                    age_label = "oldest file"
+                age_days = (now - os.path.getmtime(age_ref)) / 86400
 
                 if age_days > 30:
-                    warnings.append(f"KB age: oldest file modified {age_days:.0f}d ago — may be stale")
+                    warnings.append(f"KB age: {age_label} modified {age_days:.0f}d ago — may be stale")
                 elif age_days > 14:
-                    warnings.append(f"KB age: oldest file modified {age_days:.0f}d ago")
+                    warnings.append(f"KB age: {age_label} modified {age_days:.0f}d ago")
                 else:
                     ok_items.append(f"KB freshness: {age_days:.0f}d old, newest {newest_age:.0f}d")
             except Exception:
