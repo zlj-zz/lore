@@ -220,9 +220,17 @@ class TestMarkdownLinks(unittest.TestCase):
     def test_github_slug_keeps_cjk_drops_punct(self):
         from lore_runtime.discover import github_slug
 
+        # Comparisons strip surrounding hyphens, so the trailing one is fine.
         self.assertEqual(
-            github_slug("5. 菜单 CUD 与管理查询 ✅"), "5-菜单-cud-与管理查询"
+            github_slug("5. 菜单 CUD 与管理查询 ✅").strip("-"),
+            "5-菜单-cud-与管理查询",
         )
+
+    def test_github_slug_keeps_consecutive_hyphens(self):
+        from lore_runtime.discover import github_slug
+
+        # GitHub does not collapse spaces: 'IDL / proto' -> 'idl--proto'.
+        self.assertEqual(github_slug("9. IDL / proto 同步习惯"), "9-idl--proto-同步习惯")
 
     def test_check_crossrefs_includes_markdown_links(self):
         from lore_runtime.discover import check_crossrefs

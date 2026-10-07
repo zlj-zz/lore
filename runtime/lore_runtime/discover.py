@@ -151,10 +151,10 @@ def resolve_wikilink(link: str, cwd: str) -> dict:
 
 def github_slug(text: str) -> str:
     """Approximate GitHub's heading anchor: lowercase, drop punctuation,
-    collapse whitespace, spaces to hyphens. Keeps CJK and underscores."""
-    s = _SLUG_STRIP_RE.sub("", text.strip().lower())
-    s = re.sub(r"\s+", " ", s).strip()
-    return s.replace(" ", "-")
+    spaces to hyphens. Keeps CJK and underscores; consecutive spaces become
+    consecutive hyphens, exactly as GitHub does (so ``IDL / proto`` ->
+    ``idl--proto``)."""
+    return _SLUG_STRIP_RE.sub("", text.strip().lower()).replace(" ", "-")
 
 
 def heading_anchors(text: str) -> set:
