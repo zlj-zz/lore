@@ -6,8 +6,14 @@ from lore_runtime import discover, pitfalls as pitfalls_mod
 from lore_runtime.types import STATUS_DEGRADED, STATUS_HEALTHY, STATUS_MISSING
 
 REPO_MARKERS = {
-    "go.mod", "package.json", "Cargo.toml", ".git",
-    "pyproject.toml", "Gemfile", "pom.xml", "build.gradle",
+    "go.mod",
+    "package.json",
+    "Cargo.toml",
+    ".git",
+    "pyproject.toml",
+    "Gemfile",
+    "pom.xml",
+    "build.gradle",
 }
 
 
@@ -56,11 +62,15 @@ def check(cwd: str) -> dict:
                 age_days = (now - os.path.getmtime(age_ref)) / 86400
 
                 if age_days > 30:
-                    warnings.append(f"KB age: {age_label} modified {age_days:.0f}d ago — may be stale")
+                    warnings.append(
+                        f"KB age: {age_label} modified {age_days:.0f}d ago — may be stale"
+                    )
                 elif age_days > 14:
                     warnings.append(f"KB age: {age_label} modified {age_days:.0f}d ago")
                 else:
-                    ok_items.append(f"KB freshness: {age_days:.0f}d old, newest {newest_age:.0f}d")
+                    ok_items.append(
+                        f"KB freshness: {age_days:.0f}d old, newest {newest_age:.0f}d"
+                    )
             except Exception:
                 pass
 
@@ -75,14 +85,27 @@ def check(cwd: str) -> dict:
                         ids = ", ".join("#" + f["id"] for f in missing)
                         warnings.append(
                             "PITFALLS %s: %d entr%s missing Triggers (%s)"
-                            % (rel, len(missing), "y" if len(missing) == 1 else "ies", ids)
+                            % (
+                                rel,
+                                len(missing),
+                                "y" if len(missing) == 1 else "ies",
+                                ids,
+                            )
                         )
                     for f in findings:
                         if f["kind"] == "stale":
-                            owner_note = " (Owner: %s)" % f["owner"] if f["owner"] else ""
+                            owner_note = (
+                                " (Owner: %s)" % f["owner"] if f["owner"] else ""
+                            )
                             warnings.append(
                                 "PITFALLS %s #%s '%s': Last-verified %dd ago%s"
-                                % (rel, f["id"], f["title"], int(f["age_days"]), owner_note)
+                                % (
+                                    rel,
+                                    f["id"],
+                                    f["title"],
+                                    int(f["age_days"]),
+                                    owner_note,
+                                )
                             )
             except Exception:
                 pass
@@ -97,7 +120,9 @@ def check(cwd: str) -> dict:
                         continue
                     entries = set(os.listdir(full))
                     if entries & REPO_MARKERS:
-                        if not os.path.isfile(os.path.join(full, ".pi", "kb", "CONTEXT.md")):
+                        if not os.path.isfile(
+                            os.path.join(full, ".pi", "kb", "CONTEXT.md")
+                        ):
                             repos_without_context.append(entry)
             except PermissionError:
                 pass

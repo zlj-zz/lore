@@ -129,14 +129,22 @@ def resolve_wikilink(link: str, cwd: str) -> dict:
 
     path = _resolve_kb_file(target, cwd)
     if path is None:
-        return {"resolved": None, "anchor": None, "error": "file not found: %s" % target}
+        return {
+            "resolved": None,
+            "anchor": None,
+            "error": "file not found: %s" % target,
+        }
 
     if anchor is None:
         return {"resolved": path, "anchor": None, "error": None}
 
     matched_header = _match_anchor(path, anchor)
     if matched_header is None:
-        return {"resolved": path, "anchor": None, "error": "anchor not found: %s" % anchor}
+        return {
+            "resolved": path,
+            "anchor": None,
+            "error": "anchor not found: %s" % anchor,
+        }
 
     return {"resolved": path, "anchor": matched_header, "error": None}
 
@@ -185,8 +193,12 @@ def resolve_markdown_link(url: str, source_dir: Path) -> dict:
     except OSError:
         target = None
     if target is None or not target.is_file():
-        return {"resolved": None, "anchor": None,
-                "error": "file not found: %s" % target_part, "skip": False}
+        return {
+            "resolved": None,
+            "anchor": None,
+            "error": "file not found: %s" % target_part,
+            "skip": False,
+        }
     if not anchor:
         return {"resolved": target, "anchor": None, "error": None, "skip": False}
     try:
@@ -194,8 +206,12 @@ def resolve_markdown_link(url: str, source_dir: Path) -> dict:
     except OSError:
         return {"resolved": target, "anchor": None, "error": None, "skip": False}
     if anchor.strip("-").lower() not in {a.strip("-") for a in heading_anchors(text)}:
-        return {"resolved": target, "anchor": None,
-                "error": "anchor not found: %s" % anchor, "skip": False}
+        return {
+            "resolved": target,
+            "anchor": None,
+            "error": "anchor not found: %s" % anchor,
+            "skip": False,
+        }
     return {"resolved": target, "anchor": anchor, "error": None, "skip": False}
 
 
@@ -321,11 +337,13 @@ def check_crossrefs(cwd: str) -> list:
                     refs.append((url, resolved))
             for ref, resolved in refs:
                 status, detail = _classify(resolved)
-                results.append({
-                    "source_file": str(path),
-                    "line": lineno,
-                    "wikilink": ref,
-                    "status": status,
-                    "detail": detail,
-                })
+                results.append(
+                    {
+                        "source_file": str(path),
+                        "line": lineno,
+                        "wikilink": ref,
+                        "status": status,
+                        "detail": detail,
+                    }
+                )
     return results

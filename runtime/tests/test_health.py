@@ -10,12 +10,15 @@ class TestHealthKBage(unittest.TestCase):
         # README.md is a static index; its old mtime must not mark the KB
         # stale while the real index (MAP.md) is fresh.
         from lore_runtime.health import check
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             pikb = root / ".pikb"
             pikb.mkdir()
             (root / ".pi" / "kb").mkdir(parents=True)
-            (root / ".pi" / "kb" / "CONTEXT.md").write_text("# repo\n", encoding="utf-8")
+            (root / ".pi" / "kb" / "CONTEXT.md").write_text(
+                "# repo\n", encoding="utf-8"
+            )
             (pikb / "MAP.md").write_text("# map\n", encoding="utf-8")
             (pikb / "README.md").write_text("# index\n", encoding="utf-8")
             old = time.time() - 64 * 86400
@@ -28,12 +31,15 @@ class TestHealthKBage(unittest.TestCase):
 
     def test_stale_map_md_flags_kb(self):
         from lore_runtime.health import check
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             pikb = root / ".pikb"
             pikb.mkdir()
             (root / ".pi" / "kb").mkdir(parents=True)
-            (root / ".pi" / "kb" / "CONTEXT.md").write_text("# repo\n", encoding="utf-8")
+            (root / ".pi" / "kb" / "CONTEXT.md").write_text(
+                "# repo\n", encoding="utf-8"
+            )
             (pikb / "MAP.md").write_text("# map\n", encoding="utf-8")
             old = time.time() - 40 * 86400
             os.utime(pikb / "MAP.md", (old, old))
@@ -44,6 +50,7 @@ class TestHealthKBage(unittest.TestCase):
 class TestRepoLevelPitfalls(unittest.TestCase):
     def test_repo_pitfalls_missing_triggers_flagged(self):
         from lore_runtime.health import check
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / ".pikb").mkdir()

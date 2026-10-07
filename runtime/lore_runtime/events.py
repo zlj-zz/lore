@@ -18,7 +18,9 @@ LORE_CONTEXT_MAX_CHARS = 500
 _HOTSPOT_LOADING = os.environ.get("LORE_HOTSPOT_LOADING") == "1"
 
 
-def handle(event: str, cwd: str, path: str = None, cmd: str = None, error: str = None) -> dict:
+def handle(
+    event: str, cwd: str, path: str = None, cmd: str = None, error: str = None
+) -> dict:
     cwd = str(Path(cwd).resolve())
     if event == "health":
         return _health_event(cwd)
@@ -62,7 +64,9 @@ def _pitfalls_event(event: str, cwd: str, path: str, cmd: str) -> dict:
                     m = re.match(r"PITFALLS?#?(\d+)", ref)
                     if m:
                         pitfall_id = m.group(1)
-                    if pitfall_id and any(match["id"] == pitfall_id for match in matches):
+                    if pitfall_id and any(
+                        match["id"] == pitfall_id for match in matches
+                    ):
                         hotspot_lines.append(
                             "  → PITFALLS #%s (injected above)" % pitfall_id
                         )
@@ -93,7 +97,9 @@ def _session_start_event(cwd: str) -> dict:
     if text:
         # Truncate so the CONTEXT.md portion stays compact: keep RULES + marker
         # + first LORE_CONTEXT_MAX_CHARS characters of the injected context.
-        text = text[: len(context_mod.RULES) + len("📚 lore loaded") + LORE_CONTEXT_MAX_CHARS]
+        text = text[
+            : len(context_mod.RULES) + len("📚 lore loaded") + LORE_CONTEXT_MAX_CHARS
+        ]
     health_notes = _format_health_notes(h["status"], h["warnings"])
     if health_notes:
         text = (text + "\n\n" + health_notes) if text else health_notes
@@ -145,9 +151,7 @@ def _after_error_event(cwd: str, error_msg: str) -> dict:
                     "  %s\n"
                     "  → create entry in .pikb/PITFALLS.md with Triggers: `cmd:...`"
                 ) % error_msg[:200]
-    logger_mod.append(cwd, "after_error",
-                      error=error_msg[:200],
-                      matches=len(matches))
+    logger_mod.append(cwd, "after_error", error=error_msg[:200], matches=len(matches))
     return r
 
 
@@ -185,17 +189,27 @@ def _session_end_event(cwd: str) -> dict:
         auto_count = sum(1 for p in proposals if p.get("type") == "auto")
         draft_count = sum(1 for p in proposals if p.get("type") == "draft")
         if auto_count:
-            parts.append("\n[lore] ✏️ %d auto-maintenance action(s) needed" % auto_count)
+            parts.append(
+                "\n[lore] ✏️ %d auto-maintenance action(s) needed" % auto_count
+            )
         if draft_count:
-            parts.append("\n[lore] 📝 %d draft(s) created in .pikb/.lore-drafts/ — please review" % draft_count)
+            parts.append(
+                "\n[lore] 📝 %d draft(s) created in .pikb/.lore-drafts/ — please review"
+                % draft_count
+            )
 
     r["additional_context"] = "\n".join(parts)
 
-    logger_mod.append(cwd, "session_end",
-                      summary="%d matches, %d auto, %d drafts" % (
-                          summary.get("pitfall_matches", 0),
-                          summary.get("auto_writes", 0),
-                          summary.get("drafts", 0)))
+    logger_mod.append(
+        cwd,
+        "session_end",
+        summary="%d matches, %d auto, %d drafts"
+        % (
+            summary.get("pitfall_matches", 0),
+            summary.get("auto_writes", 0),
+            summary.get("drafts", 0),
+        ),
+    )
 
     # Wave 3: cross-reference validation
     try:
@@ -205,9 +219,10 @@ def _session_end_event(cwd: str) -> dict:
             ok_count = len(crossrefs) - len(broken)
             cr_lines = ["\n[lore] 🔗 cross-reference check:"]
             for c in broken:
-                cr_lines.append("  ❌ %s:%d → %s — %s" % (
-                    c["source_file"], c["line"], c["wikilink"], c.get("detail", "")
-                ))
+                cr_lines.append(
+                    "  ❌ %s:%d → %s — %s"
+                    % (c["source_file"], c["line"], c["wikilink"], c.get("detail", ""))
+                )
             if ok_count:
                 cr_lines.append("  ✅ %d references OK" % ok_count)
             r["additional_context"] += "\n".join(cr_lines)

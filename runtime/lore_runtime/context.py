@@ -125,7 +125,9 @@ def build_session_additional_context(cwd: str) -> Tuple[str, Optional[str], List
         if "@workspace" in text or ".pikb" in text:
             mp = discover.find_map(cwd, ctx)
             if mp is not None:
-                lines = mp.read_text(encoding="utf-8", errors="replace").splitlines()[:MAP_MAX_LINES]
+                lines = mp.read_text(encoding="utf-8", errors="replace").splitlines()[
+                    :MAP_MAX_LINES
+                ]
                 parts.append("## Workspace Map (summary)\n\n" + "\n".join(lines))
     else:
         parts.append(

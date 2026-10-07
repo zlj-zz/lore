@@ -19,6 +19,7 @@ class TestLogger(unittest.TestCase):
 
     def test_append_writes_jsonl(self):
         from lore_runtime.logger import append
+
         append(self.tmp.name, event="after_edit", path="foo.ts", matches=[{"id": "1"}])
         with open(self._log_path()) as f:
             lines = f.readlines()
@@ -30,13 +31,16 @@ class TestLogger(unittest.TestCase):
 
     def test_append_creates_pikb_if_missing(self):
         import shutil
+
         shutil.rmtree(self.pikb)
         from lore_runtime.logger import append
+
         append(self.tmp.name, event="session_start", status="healthy")
         self.assertTrue(os.path.exists(self._log_path()))
 
     def test_read_session_returns_current_session_lines(self):
         from lore_runtime.logger import append, read_session
+
         append(self.tmp.name, event="session_start")
         append(self.tmp.name, event="after_edit", path="a.ts")
         append(self.tmp.name, event="session_end")
@@ -45,6 +49,7 @@ class TestLogger(unittest.TestCase):
 
     def test_summarize_counts_events(self):
         from lore_runtime.logger import append, summarize
+
         append(self.tmp.name, event="session_start")
         append(self.tmp.name, event="after_edit", matches=[{"id": "1"}])
         append(self.tmp.name, event="after_edit", matches=[{"id": "2"}])
@@ -56,31 +61,44 @@ class TestLogger(unittest.TestCase):
 
     def test_summarize_counts_each_match_not_just_events(self):
         from lore_runtime.logger import append, summarize
+
         # One after_edit with multiple matches counts each match individually.
-        append(self.tmp.name, event="after_edit", matches=[{"id": "1"}, {"id": "2"}, {"id": "3"}])
+        append(
+            self.tmp.name,
+            event="after_edit",
+            matches=[{"id": "1"}, {"id": "2"}, {"id": "3"}],
+        )
         s = summarize(self.tmp.name)
         self.assertEqual(s["pitfall_matches"], 3)
 
     def test_summarize_empty_log(self):
         from lore_runtime.logger import summarize
+
         s = summarize("/nonexistent/path")
         self.assertEqual(s["pitfall_matches"], 0)
 
     def test_read_all_sessions_includes_other_sessions(self):
         from lore_runtime.logger import append, read_all_sessions, read_session
+
         append(self.tmp.name, event="session_start")
         # Simulate a record written by a different session/process.
         with open(self._log_path(), "a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "ts": "2026-01-01T00:00:00+00:00",
-                "session": "other-session",
-                "event": "session_start",
-            }) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "ts": "2026-01-01T00:00:00+00:00",
+                        "session": "other-session",
+                        "event": "session_start",
+                    }
+                )
+                + "\n"
+            )
         self.assertEqual(len(read_all_sessions(self.tmp.name)), 2)
         self.assertEqual(len(read_session(self.tmp.name)), 1)
 
     def test_append_trims_log_when_over_cap(self):
         import lore_runtime.logger as lg
+
         old_bytes = lg._MAX_LOG_BYTES
         lg._MAX_LOG_BYTES = 500
         try:
@@ -97,6 +115,7 @@ class TestLogger(unittest.TestCase):
 
     def test_append_filters_none_values(self):
         from lore_runtime.logger import append
+
         append(self.tmp.name, event="after_edit", path=None, notes=None, matches=[])
         with open(self._log_path()) as f:
             record = json.loads(f.readline())

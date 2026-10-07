@@ -55,14 +55,16 @@ def match(cwd: str, path: str = "", cmd: str = "") -> List[dict]:
             body = "\n".join(body_lines[body_start:body_end]).strip()
             owner = _extract_field(body, "Owner")
             last_verified = _extract_field(body, "Last verified")
-            matched.append({
-                "id": pid,
-                "title": title,
-                "difficulty": diff,
-                "body": body,
-                "owner": owner,
-                "last_verified": last_verified,
-            })
+            matched.append(
+                {
+                    "id": pid,
+                    "title": title,
+                    "difficulty": diff,
+                    "body": body,
+                    "owner": owner,
+                    "last_verified": last_verified,
+                }
+            )
 
     return matched
 
@@ -70,14 +72,21 @@ def match(cwd: str, path: str = "", cmd: str = "") -> List[dict]:
 def _extract_field(body: str, field: str) -> str:
     """Extract a field value from a PITFALLS body. Supports both 'Field: value' and '- Field: value' formats."""
     import re
-    pattern = r'(?:^|\n)\s*(?:- )?' + re.escape(field) + r'\s*[:：-]\s*(.+?)(?:\n\s*(?:- )?(?:\w|$)|$)'
+
+    pattern = (
+        r"(?:^|\n)\s*(?:- )?"
+        + re.escape(field)
+        + r"\s*[:：-]\s*(.+?)(?:\n\s*(?:- )?(?:\w|$)|$)"
+    )
     m = re.search(pattern, body)
     if m:
         return m.group(1).strip()
     return ""
 
 
-def audit_entries(pitfalls_path: Path, stale_days: int = 90, now_ts: float = None) -> List[dict]:
+def audit_entries(
+    pitfalls_path: Path, stale_days: int = 90, now_ts: float = None
+) -> List[dict]:
     """Audit one PITFALLS file, entry by entry.
 
     Returns findings for both the workspace and repo-level files:
@@ -103,8 +112,9 @@ def audit_entries(pitfalls_path: Path, stale_days: int = 90, now_ts: float = Non
         owner = _extract_field(sec, "Owner")
 
         if not re.search(r"^\s*(?:- )?Triggers:", sec, re.M):
-            findings.append({"id": pid, "title": title, "owner": owner,
-                             "kind": "missing_triggers"})
+            findings.append(
+                {"id": pid, "title": title, "owner": owner, "kind": "missing_triggers"}
+            )
 
         lv = _extract_field(sec, "Last verified")
         if not lv:
@@ -115,8 +125,15 @@ def audit_entries(pitfalls_path: Path, stale_days: int = 90, now_ts: float = Non
             continue
         age_days = max((now - lv_ts) / 86400, (now - file_mtime) / 86400)
         if age_days > stale_days:
-            findings.append({"id": pid, "title": title, "owner": owner,
-                             "kind": "stale", "age_days": age_days})
+            findings.append(
+                {
+                    "id": pid,
+                    "title": title,
+                    "owner": owner,
+                    "kind": "stale",
+                    "age_days": age_days,
+                }
+            )
     return findings
 
 
@@ -126,9 +143,7 @@ def format_additional_context(cwd: str, path: str, matches: List[dict]) -> str:
     pitfalls_path = _find_pitfalls_file(_start_dir(cwd, path))
     if not pitfalls_path:
         return ""
-    lines = [
-        "[lore] ⚠️ PITFALLS match — see %s:" % pitfalls_path
-    ]
+    lines = ["[lore] ⚠️ PITFALLS match — see %s:" % pitfalls_path]
     total_chars = len(lines[0])
     max_total = 3000
     max_per_body = 1500

@@ -14,8 +14,14 @@ from typing import Any, Dict, List
 from lore_runtime import discover, pitfalls as pitfalls_mod
 
 REPO_MARKERS = {
-    "go.mod", "package.json", "Cargo.toml", ".git",
-    "pyproject.toml", "Gemfile", "pom.xml", "build.gradle",
+    "go.mod",
+    "package.json",
+    "Cargo.toml",
+    ".git",
+    "pyproject.toml",
+    "Gemfile",
+    "pom.xml",
+    "build.gradle",
 }
 
 # Track error occurrences within this process
@@ -31,12 +37,14 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
     if not pikb:
         return {
             "stale": True,
-            "issues": [{
-                "check": ".pikb/",
-                "severity": "error",
-                "detail": ".pikb/ not found — KB not initialized",
-                "action": "run /skill:lore 创建知识库",
-            }],
+            "issues": [
+                {
+                    "check": ".pikb/",
+                    "severity": "error",
+                    "detail": ".pikb/ not found — KB not initialized",
+                    "action": "run /skill:lore 创建知识库",
+                }
+            ],
         }
 
     # 1. Repos missing CONTEXT.md
@@ -51,13 +59,15 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
             if entries & REPO_MARKERS:
                 ctx = os.path.join(full, ".pi", "kb", "CONTEXT.md")
                 if not os.path.isfile(ctx):
-                    issues.append({
-                        "check": "CONTEXT.md coverage",
-                        "severity": "warning",
-                        "detail": "repo '%s' missing CONTEXT.md" % entry,
-                        "action": "create .pi/kb/CONTEXT.md for %s" % entry,
-                        "repo": entry,
-                    })
+                    issues.append(
+                        {
+                            "check": "CONTEXT.md coverage",
+                            "severity": "warning",
+                            "detail": "repo '%s' missing CONTEXT.md" % entry,
+                            "action": "create .pi/kb/CONTEXT.md for %s" % entry,
+                            "repo": entry,
+                        }
+                    )
     except PermissionError:
         pass
 
@@ -67,12 +77,14 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
         if map_file.is_file():
             age_days = (datetime.now().timestamp() - map_file.stat().st_mtime) / 86400
             if age_days > 30:
-                issues.append({
-                    "check": "KB age",
-                    "severity": "warning",
-                    "detail": "KB last updated %.0fd ago" % age_days,
-                    "action": "review and refresh KB entries",
-                })
+                issues.append(
+                    {
+                        "check": "KB age",
+                        "severity": "warning",
+                        "detail": "KB last updated %.0fd ago" % age_days,
+                        "action": "review and refresh KB entries",
+                    }
+                )
 
     except Exception:
         pass
@@ -90,7 +102,8 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
                 issue = {
                     "check": "PITFALLS Triggers",
                     "severity": "warning",
-                    "detail": "PITFALLS %s #%s '%s' missing Triggers:" % (rel, f["id"], f["title"]),
+                    "detail": "PITFALLS %s #%s '%s' missing Triggers:"
+                    % (rel, f["id"], f["title"]),
                     "action": "add Triggers: field to PITFALLS %s #%s" % (rel, f["id"]),
                     "path": str(pf),
                 }
@@ -99,7 +112,7 @@ def check_staleness(cwd: str) -> Dict[str, Any]:
                     "check": "KB age",
                     "severity": "warning",
                     "detail": "PITFALLS %s #%s '%s' Last-verified %dd ago"
-                              % (rel, f["id"], f["title"], int(f["age_days"])),
+                    % (rel, f["id"], f["title"], int(f["age_days"])),
                     "action": "review and refresh PITFALLS %s #%s" % (rel, f["id"]),
                     "path": str(pf),
                 }
@@ -121,7 +134,8 @@ def detect_novel_error(cwd: str, error_message: str) -> bool:
     Novel = seen >= 3 times in this session without matching a known PITFALLS pattern.
     """
     import re
-    fingerprint = re.sub(r'\d+', 'N', error_message[:80])
+
+    fingerprint = re.sub(r"\d+", "N", error_message[:80])
     count = _ERROR_SEEN.get(fingerprint, 0) + 1
     _ERROR_SEEN[fingerprint] = count
     return count >= 3
@@ -140,49 +154,58 @@ def generate_proposals(cwd: str, stale: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         if check == "CONTEXT.md coverage" and "repo" in issue:
             repo = issue["repo"]
-            proposals.append({
-                "type": "auto",
-                "target": "CONTEXT.md",
-                "content": (
-                    "# %s\n\n"
-                    "TODO: describe this service.\n\n"
-                    "## Entry\n"
-                    "- main: \n"
-                    "- config: \n"
-                ) % repo,
-                "path": "%s/.pi/kb/CONTEXT.md" % repo,
-                "detail": "create CONTEXT.md for new repo '%s'" % repo,
-            })
+            proposals.append(
+                {
+                    "type": "auto",
+                    "target": "CONTEXT.md",
+                    "content": (
+                        "# %s\n\n"
+                        "TODO: describe this service.\n\n"
+                        "## Entry\n"
+                        "- main: \n"
+                        "- config: \n"
+                    )
+                    % repo,
+                    "path": "%s/.pi/kb/CONTEXT.md" % repo,
+                    "detail": "create CONTEXT.md for new repo '%s'" % repo,
+                }
+            )
 
         elif check == "KB age":
             detail = issue.get("detail", "KB may be stale")
             owner = issue.get("owner", "")
             if owner:
                 detail += " (Owner: %s)" % owner
-            proposals.append({
-                "type": "draft",
-                "target": "MAP.md",
-                "detail": detail,
-                "action": action,
-            })
+            proposals.append(
+                {
+                    "type": "draft",
+                    "target": "MAP.md",
+                    "detail": detail,
+                    "action": action,
+                }
+            )
 
         elif check == "PITFALLS Triggers":
             detail = issue.get("detail", "missing Triggers")
             owner = issue.get("owner", "")
             if owner:
                 detail += " (Owner: %s)" % owner
-            proposals.append({
-                "type": "auto",
-                "target": "PITFALLS.md",
-                "detail": detail,
-                "action": action,
-            })
+            proposals.append(
+                {
+                    "type": "auto",
+                    "target": "PITFALLS.md",
+                    "detail": detail,
+                    "action": action,
+                }
+            )
 
         elif check == ".pikb/":
-            proposals.append({
-                "type": "draft",
-                "target": "KB init",
-                "detail": "KB not initialized — run /skill:lore 创建知识库",
-            })
+            proposals.append(
+                {
+                    "type": "draft",
+                    "target": "KB init",
+                    "detail": "KB not initialized — run /skill:lore 创建知识库",
+                }
+            )
 
     return proposals

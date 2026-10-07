@@ -5,9 +5,17 @@ STATUS_DEGRADED = "degraded"
 STATUS_MISSING = "missing"
 
 REQUIRED_KEYS = (
-    "ok", "event", "cwd", "status", "context_path",
-    "additional_context", "warnings", "env", "matches",
+    "ok",
+    "event",
+    "cwd",
+    "status",
+    "context_path",
+    "additional_context",
+    "warnings",
+    "env",
+    "matches",
 )
+
 
 def empty_result(event: str, cwd: str) -> dict:
     return {
