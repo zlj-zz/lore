@@ -22,6 +22,9 @@
 |------|-----|
 | | |
 
+## Testing
+<!-- how to verify changes: test / smoke / seed commands, local deps, fixtures -->
+
 ## Dependencies
 
 | Repo | How |
