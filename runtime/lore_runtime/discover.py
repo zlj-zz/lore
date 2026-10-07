@@ -214,7 +214,10 @@ def check_crossrefs(cwd: str) -> list:
                 wikilink = match.group(1).strip()
                 if not wikilink:
                     continue
-                resolved = resolve_wikilink(wikilink, cwd)
+                # Resolve from the containing file, not the scan root: a KB
+                # file's wikilink points at its own workspace's .pikb/, which
+                # may not be an ancestor of cwd (e.g. nested workspaces).
+                resolved = resolve_wikilink(wikilink, str(path.parent))
                 if resolved["error"] is None:
                     status = "ok"
                     detail = str(resolved["resolved"])

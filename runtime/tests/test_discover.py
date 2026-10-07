@@ -112,6 +112,23 @@ class TestCheckCrossrefs(unittest.TestCase):
         self.assertEqual(results[0]["line"], 1)
         self.assertEqual(results[0]["wikilink"], "PITFALLS#999")
 
+    def test_check_crossrefs_resolves_from_source_not_cwd(self):
+        # A nested workspace's KB file must resolve against its own .pikb/,
+        # even when the scan root (cwd) sits outside that workspace.
+        from lore_runtime.discover import check_crossrefs
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outer = root / "outer"
+            inner = outer / "inner"
+            (inner / ".pikb").mkdir(parents=True)
+            (inner / ".pikb" / "PITFALLS.md").write_text("## 1. Trap\n", encoding="utf-8")
+            ctx_dir = inner / "app" / ".pi" / "kb"
+            ctx_dir.mkdir(parents=True)
+            (ctx_dir / "CONTEXT.md").write_text("see [[PITFALLS#1]]\n", encoding="utf-8")
+            results = check_crossrefs(str(outer))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], "ok")
+
     def test_check_crossrefs_reports_broken_file(self):
         from lore_runtime.discover import check_crossrefs
         with tempfile.TemporaryDirectory() as tmp:
