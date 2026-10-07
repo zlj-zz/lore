@@ -41,5 +41,28 @@ class TestHealthKBage(unittest.TestCase):
         self.assertTrue(any("KB age" in w for w in result["warnings"]))
 
 
+class TestRepoLevelPitfalls(unittest.TestCase):
+    def test_repo_pitfalls_missing_triggers_flagged(self):
+        from lore_runtime.health import check
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".pikb").mkdir()
+            (root / ".pikb" / "MAP.md").write_text("# map\n", encoding="utf-8")
+            (root / ".pi" / "kb").mkdir(parents=True)
+            (root / ".pi" / "kb" / "CONTEXT.md").write_text("# ws\n", encoding="utf-8")
+            repo = root / "svc"
+            (repo / ".pi" / "kb").mkdir(parents=True)
+            (repo / ".pi" / "kb" / "CONTEXT.md").write_text("# svc\n", encoding="utf-8")
+            (repo / ".pi" / "kb" / "PITFALLS.md").write_text(
+                "# svc pits\n\n## 1. Trap\n\n- Difficulty: \u2b50\u2b50\n- Symptom: x\n",
+                encoding="utf-8",
+            )
+            result = check(tmp)
+        self.assertTrue(
+            any("missing Triggers" in w for w in result["warnings"]),
+            result["warnings"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

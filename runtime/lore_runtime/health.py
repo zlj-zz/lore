@@ -1,10 +1,8 @@
 import os
-import re
 from datetime import datetime
 from pathlib import Path
 
-from lore_runtime import discover
-from lore_runtime.pitfalls import _extract_field
+from lore_runtime import discover, pitfalls as pitfalls_mod
 from lore_runtime.types import STATUS_DEGRADED, STATUS_HEALTHY, STATUS_MISSING
 
 REPO_MARKERS = {
@@ -66,41 +64,25 @@ def check(cwd: str) -> dict:
             except Exception:
                 pass
 
-            # Per-entry PITFALLS Last-verified staleness
+            # PITFALLS entries: missing Triggers / stale Last-verified, across
+            # the workspace file and every repo's .pi/kb file.
             try:
-                pitfalls_path = Path(pikb) / "PITFALLS.md"
-                if pitfalls_path.is_file():
-                    file_mtime = pitfalls_path.stat().st_mtime
-                    raw = pitfalls_path.read_text(encoding="utf-8", errors="replace")
-                    sections = re.split(r"^## ", raw, flags=re.M)[1:]
-                    for sec in sections:
-                        m = re.match(r"^(\d+)\.\s*(.+)", sec)
-                        if not m:
-                            continue
-                        pid = m.group(1)
-                        title = m.group(2).strip().splitlines()[0].strip()
-                        owner = _extract_field(sec, "Owner")
-                        lv = _extract_field(sec, "Last verified")
-                        lv_ts = None
-                        if lv:
-                            try:
-                                lv_ts = datetime.strptime(lv.strip(), "%Y-%m-%d").timestamp()
-                            except (ValueError, TypeError):
-                                lv_ts = None
-                        # Entries without a parseable Last verified fall back to
-                        # file mtime (backward compat) and stay covered by the
-                        # file-level KB age check above.
-                        if lv_ts is None:
-                            continue
-                        now = datetime.now().timestamp()
-                        lv_age = (now - lv_ts) / 86400
-                        mtime_age = (now - file_mtime) / 86400
-                        entry_age_days = max(lv_age, mtime_age)
-                        if entry_age_days > 90:
-                            owner_note = " (Owner: %s)" % owner if owner else ""
+                for pf in discover.find_all_pitfalls(workspace):
+                    rel = os.path.relpath(str(pf), workspace)
+                    findings = pitfalls_mod.audit_entries(pf)
+                    missing = [f for f in findings if f["kind"] == "missing_triggers"]
+                    if missing:
+                        ids = ", ".join("#" + f["id"] for f in missing)
+                        warnings.append(
+                            "PITFALLS %s: %d entr%s missing Triggers (%s)"
+                            % (rel, len(missing), "y" if len(missing) == 1 else "ies", ids)
+                        )
+                    for f in findings:
+                        if f["kind"] == "stale":
+                            owner_note = " (Owner: %s)" % f["owner"] if f["owner"] else ""
                             warnings.append(
-                                "PITFALLS #%s '%s': Last-verified %dd ago%s"
-                                % (pid, title, int(entry_age_days), owner_note)
+                                "PITFALLS %s #%s '%s': Last-verified %dd ago%s"
+                                % (rel, f["id"], f["title"], int(f["age_days"]), owner_note)
                             )
             except Exception:
                 pass

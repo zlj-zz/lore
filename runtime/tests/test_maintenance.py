@@ -20,6 +20,23 @@ class TestMaintenance(unittest.TestCase):
         # mini-ws has one repo with CONTEXT.md and PITFALLS with Triggers
         self.assertFalse(result["stale"])
 
+    def test_repo_level_pitfalls_missing_triggers_flagged(self):
+        from lore_runtime.maintenance import check_staleness
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".pikb").mkdir()
+            (root / ".pikb" / "MAP.md").write_text("# map\n", encoding="utf-8")
+            repo = root / "svc"
+            (repo / ".pi" / "kb").mkdir(parents=True)
+            (repo / ".pi" / "kb" / "PITFALLS.md").write_text(
+                "## 1. Trap\n\n- Symptom: x\n", encoding="utf-8"
+            )
+            result = check_staleness(tmp)
+        self.assertTrue(
+            any(i.get("check") == "PITFALLS Triggers" for i in result["issues"]),
+            result["issues"],
+        )
+
     def test_check_staleness_no_pikb(self):
         from lore_runtime.maintenance import check_staleness
         with tempfile.TemporaryDirectory() as tmp:

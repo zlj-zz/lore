@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import List
 
@@ -74,6 +75,49 @@ def _extract_field(body: str, field: str) -> str:
     if m:
         return m.group(1).strip()
     return ""
+
+
+def audit_entries(pitfalls_path: Path, stale_days: int = 90, now_ts: float = None) -> List[dict]:
+    """Audit one PITFALLS file, entry by entry.
+
+    Returns findings for both the workspace and repo-level files:
+      {id, title, owner, kind: 'missing_triggers'|'stale', age_days}
+    An entry without ``Triggers:`` can never auto-match; an entry whose
+    ``Last verified`` (or the file mtime, whichever is newer) is older than
+    ``stale_days`` needs review.
+    """
+    findings: List[dict] = []
+    try:
+        file_mtime = pitfalls_path.stat().st_mtime
+        raw = pitfalls_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return findings
+
+    now = now_ts if now_ts is not None else datetime.now().timestamp()
+    for sec in re.split(r"^## ", raw, flags=re.M)[1:]:
+        m = re.match(r"^(\d+)\.\s*(.+)", sec)
+        if not m:
+            continue
+        pid = m.group(1)
+        title = m.group(2).strip().splitlines()[0].strip()
+        owner = _extract_field(sec, "Owner")
+
+        if not re.search(r"^\s*(?:- )?Triggers:", sec, re.M):
+            findings.append({"id": pid, "title": title, "owner": owner,
+                             "kind": "missing_triggers"})
+
+        lv = _extract_field(sec, "Last verified")
+        if not lv:
+            continue
+        try:
+            lv_ts = datetime.strptime(lv.strip(), "%Y-%m-%d").timestamp()
+        except (ValueError, TypeError):
+            continue
+        age_days = max((now - lv_ts) / 86400, (now - file_mtime) / 86400)
+        if age_days > stale_days:
+            findings.append({"id": pid, "title": title, "owner": owner,
+                             "kind": "stale", "age_days": age_days})
+    return findings
 
 
 def format_additional_context(cwd: str, path: str, matches: List[dict]) -> str:
